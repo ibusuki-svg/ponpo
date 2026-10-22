@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#EEF3F6">
+<title>ペンタロー 見守り</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700;900&family=M+PLUS+1p:wght@400;700&display=swap">
+<style>
+/* 声が主役の一画面：中央にぬいぐるみと「きいてるよ」の輪、その下に字幕と要点。ボタンは聞き直しとお薬だけ */
+:root{
+  --bg:#E7F1EC; --paper:#FFFFFF; --ink:#16203A; --mute:#55657A; --line:#C6D8CF;
+  --fur:#B7A6DD; --fur-dark:#7A66B3; --cheek:#F2A7B3;
+  --listen:#2F9E6E; --think:#7A66B3; --speak:#E0A21C; --off:#B4552B;
+  --go:#F6C445; --go-ink:#2A2108; --go-edge:#C8981E;
+  --key-bg:#16203A; --key-ink:#FFFFFF;
+  --display:"Zen Maru Gothic","Hiragino Maru Gothic ProN","Hiragino Sans","Noto Sans JP",sans-serif;
+  --body:"M PLUS 1p","Hiragino Sans","Noto Sans JP",sans-serif;
+  --cap:1.75rem;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#121924; --paper:#1C2533; --ink:#F1F4F8; --mute:#A9B5C3; --line:#2F3B4B;
+    --fur:#9D8BD0; --fur-dark:#B4A3EA; --cheek:#D98A98;
+    --listen:#5FD3A0; --think:#B4A3EA; --speak:#F6C445; --off:#F2A07A;
+    --go-edge:#A57B12; --key-bg:#F1F4F8; --key-ink:#121924;
+    color-scheme:dark;
+  }
+}
+:root.big{--cap:2.35rem}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:18px;line-height:1.6;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-top:max(10px,env(safe-area-inset-top,0px));padding-bottom:max(40px,env(safe-area-inset-bottom,0px))}
+.wrap{max-width:560px;margin:0 auto;display:grid;gap:14px}
+button,input,select{font:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--fur-dark);outline-offset:3px}
+
+.top{display:flex;justify-content:flex-end;gap:8px}
+.small-btn{border:2px solid var(--line);background:var(--paper);color:var(--ink);border-radius:12px;padding:6px 12px;font-weight:700;font-size:.95rem}
+
+/* ぬいぐるみと状態の輪 */
+.hero{display:grid;justify-items:center;gap:6px;padding-top:4px}
+.ring{position:relative;width:176px;height:176px;border-radius:50%;display:grid;place-items:center;border:0;background:transparent;padding:0}
+.ring::before{content:"";position:absolute;inset:0;border-radius:50%;border:8px solid var(--st,var(--line));opacity:.9;transition:border-color .3s}
+.ring.listening::before{animation:pulse 1.8s ease-in-out infinite}
+@keyframes pulse{0%,100%{transform:scale(1);opacity:.9}50%{transform:scale(1.06);opacity:.45}}
+.ring svg{width:140px;height:auto}
+.status{font-family:var(--display);font-weight:900;font-size:1.35rem;color:var(--st,var(--mute));letter-spacing:.06em}
+.listening{--st:var(--listen)} .thinking{--st:var(--think)} .speaking{--st:var(--speak)} .off{--st:var(--off)}
+
+.eye{transform-origin:center;transform-box:fill-box;animation:blink 5s infinite}
+@keyframes blink{0%,94%,100%{transform:scaleY(1)}96%{transform:scaleY(.1)}}
+.mouth-open{display:none}
+.speaking .mouth-open{display:inline}
+.speaking .mouth-closed{display:none}
+.speaking .body{animation:bob .45s ease-in-out infinite alternate}
+@keyframes bob{to{transform:translateY(-3px)}}
+@media (prefers-reduced-motion:reduce){.eye,.speaking .body,.ring.listening::before,.cap.flash{animation:none}}
+
+/* 字幕 */
+.cap{background:var(--paper);border:3px solid var(--line);border-radius:22px;padding:16px 18px;min-height:5em;
+  font-family:var(--display);font-weight:700;font-size:var(--cap);line-height:1.45;word-break:auto-phrase;overflow-wrap:anywhere}
+.cap.flash{animation:flash 1.6s ease-out}
+@keyframes flash{0%,40%{border-color:var(--speak);box-shadow:0 0 0 6px color-mix(in srgb,var(--speak) 40%,transparent)}100%{border-color:var(--line);box-shadow:none}}
+.key{background:var(--key-bg);color:var(--key-ink);border-radius:16px;padding:8px 16px;text-align:center;
+  font-family:var(--display);font-weight:900;font-size:calc(var(--cap) * 1.1);letter-spacing:.06em}
+.heard{margin:0;color:var(--mute);font-size:1.05rem;min-height:1.6em}
+.heard b{color:var(--ink)}
+.again{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.again button{border:2px solid var(--fur-dark);background:var(--paper);color:var(--ink);border-radius:16px;padding:12px 8px;
+  font-family:var(--display);font-weight:900;font-size:1.25rem}
+.take{background:var(--go);color:var(--go-ink);border:0;border-radius:999px;padding:18px;font-family:var(--display);
+  font-weight:900;font-size:1.9rem;letter-spacing:.06em;box-shadow:0 6px 0 var(--go-edge)}
+.take:active{transform:translateY(4px);box-shadow:0 2px 0 var(--go-edge)}
+.note{background:var(--paper);border:2px solid var(--off);color:var(--ink);border-radius:14px;padding:10px 14px;font-size:1rem}
+
+/* 家族用 */
+details{background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:4px 16px}
+summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
+.form{display:grid;gap:12px;padding:4px 0 14px;font-size:1rem}
+.form label{display:grid;gap:4px;font-weight:700;font-size:.9rem;color:var(--mute)}
+.form input,.form select{color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:8px 10px;width:100%;min-width:0}
+.mem{margin:0;padding-left:1.2em;font-size:.95rem}
+.log{font-size:.85rem;color:var(--mute);font-variant-numeric:tabular-nums}
+.btn{border-radius:12px;padding:8px 14px;font-weight:700;border:2px solid var(--line);background:var(--bg);color:var(--ink)}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+
+/* はじめる */
+.start{position:fixed;inset:0;background:var(--bg);display:grid;place-items:center;z-index:5;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.start .inner{display:grid;gap:16px;justify-items:center;text-align:center;max-width:420px}
+.start h1{font-family:var(--display);margin:0;font-size:2rem}
+.start p{margin:0;color:var(--mute);font-size:1.05rem}
+.start .take{width:100%}
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <g id="pal-art">
+      <g class="body">
+        <ellipse cx="100" cy="122" rx="62" ry="66" fill="#1d2328"/>
+        <ellipse cx="100" cy="134" rx="40" ry="48" fill="#ffffff"/>
+        <circle cx="100" cy="70" r="46" fill="#1d2328"/>
+        <g class="eye"><ellipse cx="81" cy="70" rx="17" ry="18" fill="#ffffff"/><circle cx="83" cy="72" r="6" fill="#1d2328"/></g>
+        <g class="eye"><ellipse cx="119" cy="70" rx="17" ry="18" fill="#ffffff"/><circle cx="117" cy="72" r="6" fill="#1d2328"/></g>
+        <circle cx="81" cy="70" r="14" fill="none" stroke="#e8789a" stroke-width="4"/>
+        <circle cx="119" cy="70" r="14" fill="none" stroke="#e8789a" stroke-width="4"/>
+        <path class="mouth-closed" d="M90 88 L110 88 L100 100 Z" fill="#f2b45c"/>
+        <g class="mouth-open"><path d="M89 86 L111 86 L100 93 Z" fill="#f2b45c"/><path d="M91 96 L109 96 L100 104 Z" fill="#f2b45c"/></g>
+        <ellipse cx="78" cy="188" rx="18" ry="8" fill="#e8789a"/>
+        <ellipse cx="122" cy="188" rx="18" ry="8" fill="#e8789a"/>
+      </g>
+    </g>
+  </defs>
+</svg>
+
+<div class="start" id="start">
+  <div class="inner">
+    <svg width="140" viewBox="0 0 200 200" aria-hidden="true"><use href="#pal-art"></use></svg>
+    <h1>ペンタローと おはなし</h1>
+    <p>押すと、ペンタローが ずっと 耳を すませます。<br>マイクの確認が出たら「許可」を押してください。</p>
+    <button class="take" id="startBtn">はじめる</button>
+  </div>
+</div>
+
+<main class="wrap">
+  <div class="top"><button class="small-btn" id="sizeBtn" aria-pressed="false">文字を大きく</button></div>
+
+  <section class="hero" id="hero">
+    <button class="ring" id="ring" aria-label="ペンタロー。押すと話をさえぎって聞きます">
+      <svg viewBox="0 0 200 200" aria-hidden="true"><use href="#pal-art"></use></svg>
+    </button>
+    <div class="status" id="status" aria-live="polite">まってるよ</div>
+  </section>
+
+  <div class="cap" id="cap" aria-live="polite">こんにちは。</div>
+  <div class="key" id="key" hidden></div>
+  <p class="heard" id="heard"></p>
+
+  <button class="take" id="takeBtn" hidden>のんだよ</button>
+  <div class="again">
+    <button id="againBtn">もう一回</button>
+    <button id="slowBtn">ゆっくり</button>
+  </div>
+  <div class="note" id="micNote" hidden></div>
+
+  <details id="family">
+    <summary>家族の方へ：せってい と ようす</summary>
+    <form class="form" id="setForm">
+      <label for="fUrl">頭脳（Apps Script）のURL<input id="fUrl" inputmode="url" autocomplete="off" placeholder="https://script.google.com/macros/s/…/exec"></label>
+      <label for="fKey">合言葉（APP_KEY）<input id="fKey" autocomplete="off"></label>
+      <label for="fName">呼びかける名前<input id="fName" maxlength="20"></label>
+      <label for="fSoul">魂カード（この子はどんな子？）<textarea id="fSoul" rows="9" style="font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:8px 10px;width:100%;min-width:0;resize:vertical"></textarea></label>
+      <label for="fMode">話し方
+        <select id="fMode">
+          <option value="auto">自動（返事のようすで切り替え）</option>
+          <option value="chatty">おしゃべり</option>
+          <option value="nod">はい・いいえ（はい・いいえで答えられる質問だけ）</option>
+        </select></label>
+      <label for="fListen">聞き方（本人が声でも変えられます：「静かにして」「お話しして」「ふつうにして」）
+        <select id="fListen">
+          <option value="quiet">そっとしておく（お薬と、呼ばれたときだけ話す）</option>
+          <option value="normal">ふつう</option>
+          <option value="together">一緒にいる（こまめに声をかける）</option>
+        </select></label>
+      <label for="fRate">声の速さ
+        <select id="fRate"><option value="0.75">ゆっくり</option><option value="0.65">とてもゆっくり</option><option value="0.9">ふつう</option></select></label>
+      <label for="fPitch">声の高さ（高い音が聞こえにくい方は「低め」）
+        <select id="fPitch"><option value="0.85">低め</option><option value="1">ふつう</option><option value="1.3">高め</option></select></label>
+      <div class="row"><button type="submit" class="btn">保存する</button><span class="log" id="saveMsg"></span></div>
+      <div class="form" style="padding:0">
+        <strong style="font-size:.9rem;color:var(--mute)">お話のプラン（払う方が決めます）</strong>
+        <label for="fPlan">1日の往復数
+          <select id="fPlan"><option value="400">400往復（ふつう）</option><option value="800">800往復（たくさん話す）</option></select></label>
+        <label for="fPin">家族用の暗証番号<input id="fPin" type="password" inputmode="numeric" autocomplete="off"></label>
+        <div class="row"><button type="button" class="btn" id="planBtn">プランを変える</button><span class="log" id="planMsg"></span></div>
+      </div>
+      <div>
+        <strong style="font-size:.9rem;color:var(--mute)">いまの話し方</strong>
+        <div class="log" id="engLog"></div>
+        <div class="log" id="talkCount"></div>
+      </div>
+      <div>
+        <strong style="font-size:.9rem;color:var(--mute)">この子が覚えていること（中身は見せません）</strong>
+        <div class="log" id="memList"></div>
+      </div>
+      <div class="row"><button type="button" class="btn" id="forgetBtn">覚えていることを全部消す</button></div>
+    </form>
+  </details>
+</main>
+
+<script>
+(function(){
+  "use strict";
+  var $=function(id){return document.getElementById(id);};
+
+  /* ---------- 保存（この端末） ---------- */
+  function load(k,d){try{var v=localStorage.getItem('kokorone_care_'+k);return v?JSON.parse(v):d;}catch(e){return d;}}
+  function save(k,v){try{localStorage.setItem('kokorone_care_'+k,JSON.stringify(v));}catch(e){}}
+  var DEFAULT_SOUL=[
+    '名前：ペンタロー（白黒のペンギンのぬいぐるみ。目のまわりと足がピンク）',
+    'お迎え：2026年10月21日、すみだ水族館',
+    '一人称：「ぼく」',
+    '性格：やんちゃで元気。さっぱりしている。でもじつは寂しがり屋（それをねちねち出さない）',
+    '関係：持ち主とは友だち',
+    '言いそうなこと：持ち主が帰ってきたら「おかえり」と言う',
+    '絶対言わないこと：「ぼくたち友だちでしょ」のような押しつけがましい言い方。説教。長い説明',
+    '好き：魚',
+    '一番の思い出：すみだ水族館でお迎えされたこと'
+  ].join('\n');
+  var prefs=load('prefs',{url:'',key:'',name:'イブさん',mode:'auto',listen:'normal',rate:'0.75',pitch:'0.85',big:false,soul:DEFAULT_SOUL});
+  if(!prefs.soul) prefs.soul=DEFAULT_SOUL;
+  if(prefs.mode==='radio') prefs.mode='auto';
+  if(!prefs.listen) prefs.listen='normal';
+  var counts=null;  // 覚えている件数（頭脳から。中身は持たない）
+
+  /* ---------- 状態 ---------- */
+  var phase='idle';          // idle / listening / thinking / speaking
+  var engage=[], last={say:'',keyword:'',followup:''};
+  var talkTimes=[], tvAsked=false, tvPending=false;
+  var silenceTimer=null, silenceStep=0;
+  var rec=null, recActive=false, micBroken=false;
+  var meds=null, remindAt={}, remindCount={}, wakeLock=null;
+  var MODE_NAME={chatty:'おしゃべり',nod:'はい・いいえ'};
+  var LISTEN_NAME={quiet:'そっと',normal:'ふつう',together:'一緒にいる'};
+
+  function setPhase(p,label){
+    phase=p;
+    var cls={listening:'listening',thinking:'thinking',speaking:'speaking'}[p]||'';
+    if(micBroken && p==='listening') cls='off';
+    $('hero').className='hero '+cls; $('ring').className='ring '+cls;
+    $('status').textContent=label||({listening:micBroken?'マイクが つかえないよ':'きいてるよ',thinking:'かんがえちゅう…',speaking:'おはなしちゅう',idle:'まってるよ'}[p]);
+  }
+
+  /* ---------- 耳（音声認識） ---------- */
+  var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  function setupEar(){
+    if(!SR){ micBroken=true; showMicNote('このブラウザでは声を聞きとれません。Androidの Chrome で開いてください。'); return; }
+    rec=new SR(); rec.lang='ja-JP'; rec.interimResults=true; rec.continuous=false; rec.maxAlternatives=1;
+    rec.onstart=function(){recActive=true;};
+    rec.onresult=function(ev){
+      var interim='', fin='';
+      for(var i=ev.resultIndex;i<ev.results.length;i++){
+        var t=ev.results[i][0].transcript;
+        if(ev.results[i].isFinal) fin+=t; else interim+=t;
+      }
+      if(interim) $('heard').innerHTML='きこえた：<b></b>', $('heard').querySelector('b').textContent=interim;
+      if(fin.trim()) heard(fin.trim());
+    };
+    rec.onerror=function(ev){
+      if(ev.error==='not-allowed'||ev.error==='service-not-allowed'){
+        micBroken=true; setPhase(phase);
+        showMicNote('マイクが許可されていません。ブラウザの設定でマイクを許可してください。');
+      }
+    };
+    rec.onend=function(){ recActive=false; if(phase==='listening'&&!micBroken) setTimeout(listen,250); };
+  }
+  function listen(){
+    setPhase('listening');
+    if(!rec||recActive||micBroken||document.hidden) return;
+    try{ rec.start(); }catch(e){}
+  }
+  function deafen(){ if(rec&&recActive){ try{rec.abort();}catch(e){} } }
+  function showMicNote(t){ var n=$('micNote'); n.textContent=t; n.hidden=false; }
+
+  /* ---------- 口（読み上げ） ---------- */
+  var speakGen=0;
+  function speak(text, opt){
+    opt=opt||{};
+    var gen=++speakGen;
+    clearTimeout(silenceTimer);
+    deafen(); setPhase('speaking');
+    $('cap').textContent=text;
+    var k=$('key'); k.textContent=opt.keyword||''; k.hidden=!opt.keyword;
+    if(opt.unprompted){ var c=$('cap'); c.classList.remove('flash'); void c.offsetWidth; c.classList.add('flash'); try{navigator.vibrate&&navigator.vibrate([150,80,150]);}catch(e){} }
+    var done=false;
+    function finish(){ if(done||gen!==speakGen) return; done=true;
+      setTimeout(function(){ if(gen!==speakGen) return; listen(); startSilence(opt.wait, opt.keepStep); medsTick(); }, 350); }
+    if(!('speechSynthesis' in window)){ setTimeout(finish, 600+140*text.length); return; }
+    try{
+      speechSynthesis.cancel();
+      var u=new SpeechSynthesisUtterance(text);
+      u.lang='ja-JP'; u.rate=parseFloat(prefs.rate)*(opt.slow?0.75:1); u.pitch=parseFloat(prefs.pitch); u.volume=1;
+      var v=speechSynthesis.getVoices().filter(function(x){return /^ja/i.test(x.lang);}); if(v.length) u.voice=v[0];
+      u.onend=u.onerror=finish;
+      speechSynthesis.speak(u);
+      setTimeout(finish, 4000+260*text.length/(parseFloat(prefs.rate)||1)); // 読み上げの終わりが来ない端末の保険
+    }catch(e){ finish(); }
+  }
+
+  /* ---------- 話し方の判定 ---------- */
+  function currentMode(){
+    if(prefs.mode!=='auto') return prefs.mode;
+    var rep=engage.slice(-4).filter(function(e){return e.replied;});
+    if(!rep.length) return engage.length?'nod':'chatty';
+    var avg=rep.reduce(function(a,e){return a+e.len;},0)/rep.length;
+    return avg>=8?'chatty':'nod';
+  }
+  function renderLog(){
+    var m=currentMode(), rep=engage.filter(function(e){return e.replied;}).length;
+    $('engLog').textContent=MODE_NAME[m]+(prefs.mode==='auto'?'（自動）':'')+'　聞き方：'+LISTEN_NAME[prefs.listen]+'　返事 '+rep+' / 声かけ '+engage.length+' 回';
+    return m;
+  }
+
+  /* ---------- 沈黙 ---------- */
+  function startSilence(wait, keepStep){
+    clearTimeout(silenceTimer); if(!keepStep) silenceStep=0;
+    if(prefs.listen==='quiet') return; // そっとしておく：自分からは話しかけない
+    silenceTimer=setTimeout(onSilence, wait||(prefs.listen==='together'?20000:{chatty:40000,nod:30000}[currentMode()]));
+  }
+  // 黙ったら一言だけ声をかけ、あとは静かに待つ（一緒にいるときは、もう一言だけ）
+  var STAY=['ぼくは ここに いるからね。','ゆっくりで いいよ。'];
+  function onSilence(){
+    if(phase!=='listening') return;
+    silenceStep++;
+    engage.push({replied:false,len:0}); engage=engage.slice(-20);
+    renderLog();
+    var line=null;
+    if(silenceStep===1) line=last.followup||null;
+    else if(silenceStep===2 && prefs.listen==='together') line=STAY[Math.floor(Math.random()*STAY.length)];
+    if(line){ speak(line,{unprompted:true,keepStep:true,wait:prefs.listen==='together'?30000:60000}); }
+    else { setPhase('listening','しずかに きいてるよ'); } // 字幕は最後のことばのまま残す
+  }
+
+  /* ---------- 聞こえたとき ---------- */
+  var TAKEN_RE=/(飲んだ|のんだ|飲みました|のみました|飲んだよ|のんだよ)/, NOT_RE=/(まだ|飲んでない|のんでない|飲んでいない|飲まない|のまない)/;
+  var AGAIN_RE=/^(え[っー]?|なに|何|もう一回|もういっかい|もう一度|きこえない|聞こえない)[？?！!。]*$/;
+  function heard(text){
+    if(phase!=='listening') return;
+    clearTimeout(silenceTimer);
+    $('heard').innerHTML='あなた：<b></b>'; $('heard').querySelector('b').textContent=text;
+    engage.push({replied:true,len:text.length>=8?text.length:(text.length<=3?2:text.length)}); engage=engage.slice(-20);
+    renderLog();
+    // 聞き返しは、短くゆっくり言い直すだけ（Claudeを呼ばない）
+    if(AGAIN_RE.test(text) && last.say){ speak(last.say,{keyword:last.keyword,slow:true}); return; }
+    // テレビの確認への答え
+    if(tvPending){ tvPending=false;
+      if(YES_RE.test(text)){ setListen('quiet','わかった。そっと しておくね。よんだら こたえるよ。'); return; }
+      if(NO_RE.test(text)){ say('そっか。ぼくは ここで きいてるね。'); return; } }
+    // 聞き方の切り替え（本人が声で決める）
+    if(QUIET_RE.test(text)){ setListen('quiet','わかった。しずかに してるね。よんだら こたえるよ。'); return; }
+    if(TOGETHER_RE.test(text)){ setListen('together','うん！ いっしょに いるよ。'); return; }
+    if(NORMAL_RE.test(text)){ setListen('normal','わかった。いつもどおりに するね。'); return; }
+    // お薬（量や飲み方には答えない。飲んだかどうかは記録で答える）
+    var due=dueSlot();
+    if(due && TAKEN_RE.test(text) && !NOT_RE.test(text) && !DIDI_RE.test(text)){ markTaken(due); return; }
+    if(/薬|くすり/.test(text) && MEDQ_RE.test(text)){ say('お薬の 飲み方は、お医者さんか 薬局の人に きこうね。','きいてみよう'); return; }
+    if(DIDI_RE.test(text) && meds){ say(takenReport(),'おくすり'); return; }
+    if(isAizuchi(text)){ var a=AIZUCHI[Math.floor(Math.random()*AIZUCHI.length)]; say(a); logLocal(text,a); return; }
+    // テレビかもしれない：相手のいない長い話し声が続いたら、一度だけ確かめる
+    if(looksLikeTv(text)){ tvAsked=true; tvPending=true; say('テレビ みてる？ そっと しておこうか？','テレビ？'); return; }
+    ask(text);
+  }
+  var QUIET_RE=/(静かにして|しずかにして|そっとして|だまって|黙って|ひとりにして|一人にして)/;
+  var TOGETHER_RE=/(お話しして|おはなしして|お話ししよう|おはなししよう|話しかけて|はなしかけて|一緒にいて|いっしょにいて)/;
+  var NORMAL_RE=/(ふつうにして|普通にして|もとに戻して|元に戻して)/;
+  var DIDI_RE=/(飲んだっけ|のんだっけ|飲んだかな|のんだかな|飲みましたか|のみましたか)/;
+  var MEDQ_RE=/(何錠|なんじょう|何粒|量|飲まなくて|のまなくて|やめても|やめていい|増やして|ふやして|減らして|へらして|一緒に飲んで|飲み合わせ|のみあわせ|二回飲|2回飲|倍)/;
+  var YES_RE=/^(はい|うん|そう|ええ|見てる|みてる)/, NO_RE=/^(いいえ|ううん|ちがう|違う|いや)/;
+  // 本人の短い相づち（「うん」「そうね」など）。こちらが質問した直後の「はい・いいえ」は返事なのでClaudeに回す
+  var AIZUCHI_RE=/^(うん|うんうん|そう|そうね|そうだね|そうよ|そうか|そっか|そうなの|へえ|へー|へぇ|ふーん|ふうん|なるほど|ほう|ほー|あら|あらまあ|まあ|ふふ|ははは?)[。、！!ー〜えぇ]*$/;  // 「そうねえ」のようにのばしてもよい
+  var AIZUCHI=['うんうん。','そっかあ。','へへ、そうだよね。','うん、きいてるよ。'];
+  function isAizuchi(text){ return AIZUCHI_RE.test(text.trim()) && !/[？?]$|か[。]?$/.test(last.say||''); }
+  function logLocal(text,sayText){ if(prefs.url) call('log',{name:prefs.name,text:text,say:sayText}).catch(function(){}); }
+  function say(t,k){ last={say:t,keyword:k||'',followup:''}; speak(t,{keyword:k||''}); }
+  function setListen(v,line){ prefs.listen=v; save('prefs',prefs); applyPrefs(); renderLog(); say(line); }
+  function looksLikeTv(text){
+    var now=Date.now();
+    talkTimes.push({t:now,len:text.length}); talkTimes=talkTimes.filter(function(x){return now-x.t<90000;});
+    if(tvAsked||prefs.listen==='quiet') return false;
+    return text.length>=60 || talkTimes.filter(function(x){return x.len>=25;}).length>=3;
+  }
+  function takenReport(){
+    var now=jstMin(), s=meds.settings, out=[];
+    s.slots.forEach(function(sl){ if(toMin(sl.time)>now) return; var e=meds.log[sl.id]||{};
+      if(e.taken) out.push(sl.label+'の お薬は '+(e.taken==='済'?'さっき':e.taken.replace(':','時')+'分に')+' のんだよ。');
+      else out.push(sl.label+'の お薬は、まだ みたい。'); });
+    return out.length?out.slice(-2).join(' '):'きょうの お薬の 時間は、まだだよ。';
+  }
+
+  /* ---------- 頭脳（Apps Script 経由で Claude） ---------- */
+  function call(action, extra){
+    var body=Object.assign({action:action,key:prefs.key},extra||{});
+    return fetch(prefs.url,{method:'POST',body:JSON.stringify(body),redirect:'follow'})
+      .then(function(r){return r.json();})
+      .then(function(j){ if(!j.ok) throw new Error(j.error||'うまく いきませんでした'); return j.data; });
+  }
+  function ask(userText){
+    var mode=renderLog();
+    deafen(); setPhase('thinking');
+    if(!prefs.url){ return offline(userText,mode); }
+    // 会話は頭脳の側で全部残し、今日と昨日の分・要点・関係する思い出を頭脳が選んで渡す
+    call('talk',{mode:mode,listen:prefs.listen,text:userText||'',medsNote:medsNote(),soul:prefs.soul,name:prefs.name}).then(function(r){
+      last={say:r.say,keyword:r.keyword,followup:r.followup};
+      refreshCounts();
+      speak(r.say,{keyword:r.keyword});
+    }).catch(function(e){
+      last={say:'ごめんね、いま うまく 考えられないよ。もう一回 おしえてね。',keyword:'もう一回',followup:''};
+      speak(last.say,{keyword:last.keyword});
+      console.warn(e);
+    });
+  }
+  // 頭脳をつなぐ前でも耳と口を試せる、決まった言葉
+  var FB=['そうなんだ！ もっと きかせて。','うん、うん。それで どうなったの？','きょうは どんな日だった？','おかえり！ おちゃ のんだ？'];
+  function offline(userText,mode){
+    var say=userText?FB[Math.floor(Math.random()*2)]:FB[2+Math.floor(Math.random()*2)];
+    last={say:say,keyword:'',followup:'ぼくは ここに いるからね。'};
+    setTimeout(function(){ speak(say); },400);
+  }
+
+  /* ---------- お薬 ---------- */
+  function jstMin(){ var p=new Intl.DateTimeFormat('ja-JP',{timeZone:'Asia/Tokyo',hour:'2-digit',minute:'2-digit',hour12:false}).formatToParts(new Date()); var o={}; p.forEach(function(x){o[x.type]=x.value;}); return (parseInt(o.hour,10)%24)*60+parseInt(o.minute,10); }
+  function toMin(hm){var p=hm.split(':');return parseInt(p[0],10)*60+parseInt(p[1],10);}
+  function dueSlot(){
+    if(!meds) return null; var now=jstMin(), s=meds.settings;
+    for(var i=0;i<s.slots.length;i++){ var sl=s.slots[i], e=meds.log[sl.id]||{}, d=toMin(sl.time);
+      if(!e.taken && now>=d && now<d+s.graceMinutes+90) return sl; }
+    return null;
+  }
+  function medsNote(){ var d=dueSlot(); return d?('いまは「'+d.label+'」のお薬の時間で、まだ飲んでいない。話の切れ目でやさしく思い出させてよい。飲むかどうか・量は本人とお医者さんが決めること。'):''; }
+  function refreshMeds(){
+    if(!prefs.url) return;
+    call('state').then(function(st){ meds=st; counts=st.counts||counts; talkInfo=st.talk||talkInfo; renderMemory(); medsTick(); }).catch(function(){});
+  }
+  function medsTick(){
+    var d=dueSlot(); $('takeBtn').hidden=!d; if(!d) return;
+    $('takeBtn').dataset.slot=d.id;
+    var now=jstMin();
+    if(phase==='listening' && (remindAt[d.id]===undefined || now-remindAt[d.id]>=10) && (remindCount[d.id]||0)<4){
+      remindAt[d.id]=now;
+      var n=(remindCount[d.id]=(remindCount[d.id]||0)+1); // 4回まで。2回目からは短く
+      speak(n===1?(prefs.name+'、'+d.label+'の お薬の 時間だよ。のんだら「のんだよ」って おしえてね。'):(prefs.name+'、お薬 わすれて ないかな？'),{keyword:'おくすり',unprompted:true});
+    }
+  }
+  function markTaken(slot){
+    if(meds){ meds.log[slot.id]=meds.log[slot.id]||{}; meds.log[slot.id].taken='済'; }
+    $('takeBtn').hidden=true;
+    speak('えらいね！ちゃんと のめたね。おぼえておくよ。',{keyword:'のめたね'});
+    call('taken',{slot:slot.id}).then(function(log){ if(meds) meds.log=log; }).catch(function(){
+      if(meds) delete meds.log[slot.id].taken; $('takeBtn').hidden=false;
+      speak('ごめんね、記録できなかったよ。ボタンを 押してね。');
+    });
+  }
+
+  /* ---------- 操作 ---------- */
+  $('startBtn').addEventListener('click',function(){
+    $('start').hidden=true;
+    try{ if(navigator.wakeLock) navigator.wakeLock.request('screen').then(function(w){wakeLock=w;}).catch(function(){}); }catch(e){}
+    setupEar(); renderLog(); refreshMeds();
+    ask(null);
+  });
+  $('ring').addEventListener('click',function(){ // さえぎって聞く
+    if(phase==='idle') return;
+    speakGen++; try{speechSynthesis.cancel();}catch(e){}
+    listen(); startSilence();
+  });
+  $('againBtn').addEventListener('click',function(){ if(last.say) speak(last.say,{keyword:last.keyword}); });
+  $('slowBtn').addEventListener('click',function(){ if(last.say) speak(last.say,{keyword:last.keyword,slow:true}); });
+  $('takeBtn').addEventListener('click',function(){ var d=dueSlot(); if(d) markTaken(d); });
+  $('sizeBtn').addEventListener('click',function(){ prefs.big=!prefs.big; save('prefs',prefs); applyPrefs(); });
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden){ deafen(); }
+    else if(phase!=='idle'){ refreshMeds(); if(phase==='listening') listen(); try{ if(navigator.wakeLock) navigator.wakeLock.request('screen').catch(function(){}); }catch(e){} }
+  });
+
+  function applyPrefs(){
+    document.documentElement.classList.toggle('big',!!prefs.big);
+    $('sizeBtn').textContent=prefs.big?'文字をふつうに':'文字を大きく';
+    $('sizeBtn').setAttribute('aria-pressed',prefs.big?'true':'false');
+    $('fUrl').value=prefs.url; $('fKey').value=prefs.key; $('fName').value=prefs.name;
+    $('fSoul').value=prefs.soul; $('fMode').value=prefs.mode; $('fListen').value=prefs.listen; $('fRate').value=prefs.rate; $('fPitch').value=prefs.pitch;
+  }
+  $('setForm').addEventListener('submit',function(e){
+    e.preventDefault();
+    prefs.url=$('fUrl').value.trim(); prefs.key=$('fKey').value.trim();
+    prefs.name=$('fName').value.trim()||'イブさん'; prefs.soul=$('fSoul').value.trim()||DEFAULT_SOUL;
+    prefs.mode=$('fMode').value; prefs.listen=$('fListen').value; prefs.rate=$('fRate').value; prefs.pitch=$('fPitch').value;
+    save('prefs',prefs); renderLog();
+    $('saveMsg').textContent='保存しました。';
+    if(prefs.url){ call('state').then(function(st){meds=st; counts=st.counts||null; talkInfo=st.talk||null; renderMemory(); $('saveMsg').textContent='保存しました。頭脳につながりました。'; medsTick();})
+      .catch(function(err){ $('saveMsg').textContent='保存しました。ただし頭脳につながりません：'+err.message; }); }
+  });
+  function renderMemory(){
+    // 思い出は中身を見せない（この子が勝手に覚えている形）。件数だけ出す
+    renderTalk();
+    if(!counts){ $('memList').textContent=prefs.url?'（頭脳につながると出ます）':'頭脳につながっていません'; return; }
+    $('memList').textContent='思い出 '+counts.memory+' こ ／ 物の置き場所 '+counts.place+' こ';
+  }
+  function refreshCounts(){ if(prefs.url) call('state').then(function(st){ meds=st; counts=st.counts||counts; talkInfo=st.talk||talkInfo; renderMemory(); }).catch(function(){}); }
+  var talkInfo=null;
+  function renderTalk(){
+    if(!talkInfo){ $('talkCount').textContent=''; return; }
+    $('fPlan').value=String(talkInfo.plan);
+    var c=talkInfo.count, p=talkInfo.plan;
+    $('talkCount').textContent='きょうの お話（Claude）'+c+' / '+p+' 往復'+(c>=p*3?'　（たくさん話したので、名前を呼んだときだけ考えて返事します）':c>=p?'　（たくさん話したので、軽くして続けています）':'');
+  }
+  $('planBtn').addEventListener('click',function(){
+    if(!prefs.url){ $('planMsg').textContent='頭脳につながっていません'; return; }
+    call('plan',{plan:$('fPlan').value,pin:$('fPin').value}).then(function(r){
+      $('fPin').value=''; $('planMsg').textContent=r.plan+'往復のプランにしました。'; refreshCounts();
+    }).catch(function(e){ $('planMsg').textContent='変えられませんでした：'+e.message; });
+  });
+  var forgetArmed=false;
+  $('forgetBtn').addEventListener('click',function(){
+    if(!forgetArmed){ forgetArmed=true; this.textContent='もう一度押すと全部消えます'; var b=this; setTimeout(function(){forgetArmed=false;b.textContent='覚えていることを全部消す';},5000); return; }
+    forgetArmed=false; var b=this;
+    if(!prefs.url){ b.textContent='頭脳につながっていません'; return; }
+    call('forgetAll').then(function(c){ counts=c; renderMemory(); b.textContent='消しました'; }).catch(function(e){ b.textContent='消せませんでした：'+e.message; });
+  });
+
+  applyPrefs(); renderMemory(); renderLog();
+  if('speechSynthesis' in window){ try{speechSynthesis.getVoices();}catch(e){} }
+  setInterval(medsTick,30000);
+  setInterval(refreshMeds,5*60000);
+})();
+</script>
+</body>
+</html>
