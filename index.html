@@ -302,7 +302,7 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
   if(prefs.mode==='radio') prefs.mode='auto';
   if(!prefs.listen) prefs.listen='normal';
   var counts=null;
-  var SCREEN_VERSION='10/23-5', brainVersion=null, lastTiming='';   // 画面の版。上げ直すたびに変える
+  var SCREEN_VERSION='10/23-6', brainVersion=null, lastTiming='';   // 画面の版。上げ直すたびに変える
   function renderVer(){ $('verLine').textContent='テスト版　画面 '+SCREEN_VERSION+' ／ 頭脳 '+(brainVersion?('v'+brainVersion):'—')+(lastTiming?' ／ '+lastTiming:''); }
   // 頭脳と同じ見分け方：相談・質問は一段上の型で、調べることもあるので少し時間がかかる（調書26）
   var SMART_RE=/[？?]\s*$|教えて|おしえて|どうしたら|どうすれば|どうやって|何がいい|なにがいい|どれがいい|何をあげ|なにをあげ|って何|ってなに|ってなん|とは何|知ってる|しってる|調べて|しらべて|いつから|いつまで|何時から|なんじから|どこで|なぜ|なんで|方法|やり方|相談|困って|こまって|迷って|まよって/;  // 覚えている件数（頭脳から。中身は持たない）
@@ -526,7 +526,7 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
     if(/薬|くすり/.test(text) && MEDQ_RE.test(text)){ say('お薬の 飲み方は、お医者さんか 薬局の人に きこうね。','きいてみよう'); return; }
     if(DIDI_RE.test(text) && meds){ say(takenReport(),'おくすり'); return; }
     if(GOMI_OUT_RE.test(text) && !$('gomi').hidden && !$('gomi').classList.contains('eve')){ gomiOut(); logLocal(text,'（ゴミを出した）'); return; }
-    if(EVQ_RE.test(text) && !EVSET_RE.test(text) && prefs.url){ var et=eventsText(text); say(et,'よてい'); logLocal(text,et); return; }
+    if(EVQ_RE.test(text) && !EVSET_RE.test(text) && prefs.url){ var et=eventsText(text); if(et!==null){ say(et,'よてい'); logLocal(text,et); return; } }
     if(GOMIQ_RE.test(text) && area && area.garbage.length){ var gt=gomiText(text); say(gt,'ゴミ'); logLocal(text,gt); return; }
     if(TIME_RE.test(text)){ var tt=timeText(); say(tt,'いま'); logLocal(text,tt); return; }
     if(DATE_RE.test(text)){ var dt=dateText(); say(dt,'きょう'); logLocal(text,dt); return; }
@@ -867,11 +867,30 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
     if(h>=19&&h<22&&area&&area.tomorrow.length&&!dayFlag('gomiEve')){ setFlag('gomiEve'); speakNote('あしたは '+kinds(area.tomorrow)+' の日だよ。','あしたゴミ'); return true; }
     return false;
   }
+  // 話の中の日にち（「25日」「10月25日」「月曜日」「来週の月曜」）を読む。読めない日にちの言い方があれば null（調書40）
+  function parseDay(text){
+    var t=todayKey(), tp=t.split('-').map(Number), z=String(text).replace(/[０-９]/g,function(c){return String.fromCharCode(c.charCodeAt(0)-0xFEE0);});
+    if(/第\s*\d|最後の|さいごの/.test(z)) return null;   // 「第3土曜」などは読まない
+    var m=/(\d{1,2})月(\d{1,2})日/.exec(z);
+    if(m){ var y=tp[0]; if(+m[1]<tp[1]-1) y++; return y+'-'+('0'+m[1]).slice(-2)+'-'+('0'+m[2]).slice(-2); }
+    m=/(\d{1,2})日/.exec(z);
+    if(m){ var mo=tp[1], yy=tp[0]; if(+m[1]<tp[2]){ mo++; if(mo>12){ mo=1; yy++; } } return yy+'-'+('0'+mo).slice(-2)+'-'+('0'+m[1]).slice(-2); }
+    m=/(来週|らいしゅう)?の?(日|月|火|水|木|金|土)曜/.exec(z);
+    if(m){
+      var want=WD.indexOf(m[2]), now=new Date(Date.UTC(tp[0],tp[1]-1,tp[2])).getUTCDay(), add=(want-now+7)%7;
+      if(m[1]){ var toNextMon=((8-now)%7)||7; add=toNextMon+((want+6)%7); }   // 来週＝次の月曜から始まる週
+      return addDays(t,add);
+    }
+    return /\d|曜/.test(z)?null:'';
+  }
   function eventsText(text){
-    var t=todayKey(), day=/あさって|明後日/.test(text)?addDays(t,2):/あした|明日/.test(text)?addDays(t,1):/これから|今週|来週|今度|こんど/.test(text)?'':t;
-    var name=!day?'これからの':day===t?'きょうの':day===addDays(t,1)?'あしたの':'あさっての';
+    var t=todayKey(), p=parseDay(text);
+    if(p===null) return null;   // 読めない日にち：きょうと決めつけず、頭脳にまかせる
+    var day=p||(/あさって|明後日/.test(text)?addDays(t,2):/あした|明日/.test(text)?addDays(t,1):/これから|今週|来週|今度|こんど/.test(text)?'':t);
+    var full=day?dayWords(day).replace(' ','（')+'）':'', rel=day===t?'きょう':day===addDays(t,1)?'あした':day===addDays(t,2)?'あさって':'';
+    var name=!day?'これからの':p?(rel?rel+'、':'')+full+'の':(rel||full)+'の';   // 日にちで聞かれたら、日にちでも答える
     var list=events.filter(function(e){return !day||e.date===day;});
-    if(!list.length) return name+' 予定は、入ってないよ。入れるときは「あしたの2時に歯医者」みたいに 言ってね。';
+    if(!list.length){ var hint=dayFlag('evHint')?'':' 入れるときは「あしたの2時に歯医者」みたいに 言ってね。'; setFlag('evHint'); return name+' 予定は、入ってないよ。'+hint; }
     return name+' 予定は、'+list.slice(0,4).map(function(e){return (day?'':dayWords(e.date).split(' ')[0]+' ')+(e.time?hmWords(e.time)+'に ':'')+e.what;}).join('、')+'。';
   }
   function gomiText(text){
