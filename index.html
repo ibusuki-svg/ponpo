@@ -79,6 +79,8 @@ button{cursor:pointer}
 .take{background:var(--go);color:var(--go-ink);border:0;border-radius:999px;padding:18px;font-family:var(--display);
   font-weight:900;font-size:1.9rem;letter-spacing:.06em;box-shadow:0 6px 0 var(--go-edge)}
 .take:active{transform:translateY(4px);box-shadow:0 2px 0 var(--go-edge)}
+.topcol{display:grid;justify-items:end;gap:2px}
+.ver{font-size:.75rem;color:var(--mute);font-variant-numeric:tabular-nums}
 .typebox{display:flex;gap:8px}
 .callbox{display:grid;gap:10px}
 .callbox a.take{display:block;text-align:center;text-decoration:none}
@@ -140,7 +142,7 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
 </div>
 
 <main class="wrap">
-  <div class="top"><button class="small-btn" id="sizeBtn" aria-pressed="false">文字を大きく</button></div>
+  <div class="top"><div class="topcol"><button class="small-btn" id="sizeBtn" aria-pressed="false">文字を大きく</button><div class="ver" id="verLine"></div></div></div>
 
   <section class="hero" id="hero">
     <button class="ring" id="ring" aria-label="ペンタロー。押すと話をさえぎって聞きます">
@@ -192,6 +194,8 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
       <label for="fPitch">声の高さ（高い音が聞こえにくい方は「低め」）
         <select id="fPitch"><option value="0.85">低め</option><option value="1">ふつう</option><option value="1.3">高め</option></select></label>
       <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="fType" style="width:auto">文字で話す欄を出す（テスト用。聞き取りに頼らず会話を試せる）</label>
+      <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="fSe" style="width:auto">合図の音を鳴らす（話していい合図・聞き取り完了の合図）</label>
+      <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="fBarge" style="width:auto">ペンタローが話している途中でも、声で止められる（スピーカーの音を拾うときはオフ）</label>
       <div class="row"><button type="submit" class="btn">保存する</button><span class="log" id="saveMsg"></span></div>
       <div class="form" style="padding:0">
         <strong style="font-size:.9rem;color:var(--mute)">お話のプラン（払う方が決めます）</strong>
@@ -244,7 +248,9 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
   if(!prefs.soul) prefs.soul=DEFAULT_SOUL;
   if(prefs.mode==='radio') prefs.mode='auto';
   if(!prefs.listen) prefs.listen='normal';
-  var counts=null;  // 覚えている件数（頭脳から。中身は持たない）
+  var counts=null;
+  var SCREEN_VERSION='10/23-2', brainVersion=null;   // 画面の版。上げ直すたびに変える
+  function renderVer(){ $('verLine').textContent='テスト版　画面 '+SCREEN_VERSION+' ／ 頭脳 '+(brainVersion?('v'+brainVersion):'—'); }  // 覚えている件数（頭脳から。中身は持たない）
 
   /* ---------- 状態 ---------- */
   var phase='idle';          // idle / listening / thinking / speaking
@@ -268,16 +274,20 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
   var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   function setupEar(){
     if(!SR){ micBroken=true; showMicNote('このブラウザでは声を聞きとれません。Androidの Chrome で開いてください。'); return; }
-    rec=new SR(); rec.lang='ja-JP'; rec.interimResults=true; rec.continuous=false; rec.maxAlternatives=1;
+    rec=new SR(); rec.lang='ja-JP'; rec.interimResults=true; rec.continuous=true; rec.maxAlternatives=1;
     rec.onstart=function(){recActive=true;};
     rec.onresult=function(ev){
-      var interim='', fin='';
+      if(phase!=='listening') return;
+      var interim='';
       for(var i=ev.resultIndex;i<ev.results.length;i++){
         var t=ev.results[i][0].transcript;
-        if(ev.results[i].isFinal) fin+=t; else interim+=t;
+        if(ev.results[i].isFinal) heardBuf+=t; else interim+=t;
       }
-      if(interim) $('heard').innerHTML='きこえた：<b></b>', $('heard').querySelector('b').textContent=interim;
-      if(fin.trim()) heard(fin.trim());
+      lastInterim=interim;
+      var shown=(heardBuf+interim).trim();
+      if(shown){ $('heard').innerHTML='きこえた：<b></b>'; $('heard').querySelector('b').textContent=shown; }
+      // 途中で少し間が空いても切らない。最後に声が聞こえてから END_MS たったら、ひとまとまりとして受け取る
+      clearTimeout(endTimer); endTimer=setTimeout(flushHeard,END_MS);
     };
     rec.onerror=function(ev){
       if(ev.error==='not-allowed'||ev.error==='service-not-allowed'){
@@ -287,10 +297,39 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
     };
     rec.onend=function(){ recActive=false; if(phase==='listening'&&!micBroken) setTimeout(listen,250); };
   }
+  var END_MS=1600, heardBuf='', lastInterim='', endTimer=null;
+  function flushHeard(){
+    var t=(heardBuf+lastInterim).trim(); heardBuf=''; lastInterim='';
+    if(!t||phase!=='listening') return;
+    chime('done'); heard(t);
+  }
   function listen(){
+    var fresh=phase!=='listening';
     setPhase('listening');
+    if(fresh){ heardBuf=''; lastInterim=''; clearTimeout(endTimer); }
     if(!rec||recActive||micBroken||document.hidden) return;
+    if(fresh&&chime('listen')){ setTimeout(function(){ if(phase==='listening'&&!recActive) try{ rec.start(); }catch(e){} },320); return; }   // 合図の音を拾わないよう、鳴り終わってから聞く
     try{ rec.start(); }catch(e){}
+  }
+  /* ---------- 合図の音 ---------- */
+  // やわらかい丸い音（正弦波・立ち上がり10ms・ゆっくり消える）。高すぎない音域で、小さめ
+  var seCtx=null;
+  function chime(kind){
+    if(prefs.se===false) return false;
+    try{
+      var AC=window.AudioContext||window.webkitAudioContext; if(!AC) return false;
+      seCtx=seCtx||new AC(); if(seCtx.state==='suspended') seCtx.resume();
+      var notes=kind==='listen'?[587.33,783.99]:[659.25,523.25];      // 話していい：上がる2音（レ→ソ）／聞き取り完了：下がる2音（ミ→ド）
+      var t0=seCtx.currentTime+0.01;
+      notes.forEach(function(f,i){
+        var o=seCtx.createOscillator(), g=seCtx.createGain();
+        o.type='sine'; o.frequency.value=f;
+        var st=t0+i*0.11;
+        g.gain.setValueAtTime(0,st); g.gain.linearRampToValueAtTime(0.12,st+0.01); g.gain.exponentialRampToValueAtTime(0.0008,st+0.22);
+        o.connect(g); g.connect(seCtx.destination); o.start(st); o.stop(st+0.25);
+      });
+      return true;
+    }catch(e){ return false; }
   }
   function deafen(){ if(rec&&recActive){ try{rec.abort();}catch(e){} } }
   // 音量の目安：聞いているあいだだけ、声の大きさを輪に映す。マイクを別に開けない端末では何もしない
@@ -309,9 +348,14 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
         var lv=Math.max(0,Math.min(1,(db+60)/40));
         level=lv>level?lv:level*0.85+lv*0.15;                         // 上がるのは速く、下がるのはゆっくり
         $('ring').style.setProperty('--lv',phase==='listening'?level.toFixed(3):'0');
+        // 話している途中に相手の声が0.5秒ほど続いたら、読み上げを止めて聞く（スピーカーの音で止まらないよう高めのしきい値）
+        if(phase==='speaking'&&prefs.barge!==false&&!speakingStart(400)){ bargeN=lv>BARGE_LV?bargeN+1:0; if(bargeN>=8){ bargeN=0; interrupt(); } } else bargeN=0;
       },60);
     }).catch(function(){});
   }
+  var BARGE_LV=0.6, bargeN=0, speakT0=0;
+  function speakingStart(ms){ return Date.now()-speakT0<ms; }   // 話し始めの音で止まらない
+  function interrupt(){ speakGen++; try{speechSynthesis.cancel();}catch(e){} listen(); startSilence(); }
   function showMicNote(t){ var n=$('micNote'); n.textContent=t; n.hidden=false; }
 
   /* ---------- 口（読み上げ） ---------- */
@@ -320,7 +364,7 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
     opt=opt||{};
     var gen=++speakGen;
     clearTimeout(silenceTimer);
-    deafen(); setPhase('speaking');
+    deafen(); setPhase('speaking'); speakT0=Date.now(); bargeN=0;
     $('cap').textContent=text;
     var k=$('key'); k.textContent=opt.keyword||''; k.hidden=!opt.keyword;
     if(opt.unprompted){ var c=$('cap'); c.classList.remove('flash'); void c.offsetWidth; c.classList.add('flash'); try{navigator.vibrate&&navigator.vibrate([150,80,150]);}catch(e){} }
@@ -504,8 +548,7 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
   });
   $('ring').addEventListener('click',function(){ // さえぎって聞く
     if(phase==='idle') return;
-    speakGen++; try{speechSynthesis.cancel();}catch(e){}
-    listen(); startSilence();
+    interrupt();
   });
   $('againBtn').addEventListener('click',function(){ if(last.say) speak(last.say,{keyword:last.keyword}); });
   $('slowBtn').addEventListener('click',function(){ if(last.say) speak(last.say,{keyword:last.keyword,slow:true}); });
@@ -523,12 +566,13 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
     $('fUrl').value=prefs.url; $('fKey').value=prefs.key; $('fName').value=prefs.name;
     $('fSoul').value=prefs.soul; $('fMode').value=prefs.mode; $('fListen').value=prefs.listen; $('fRate').value=prefs.rate; $('fPitch').value=prefs.pitch;
     $('fType').checked=!!prefs.typeIn; $('typeBox').hidden=!prefs.typeIn;
+    $('fSe').checked=prefs.se!==false; $('fBarge').checked=prefs.barge!==false;
   }
   $('setForm').addEventListener('submit',function(e){
     e.preventDefault();
     prefs.url=$('fUrl').value.trim(); prefs.key=$('fKey').value.trim();
     prefs.name=$('fName').value.trim()||'イブさん'; prefs.soul=$('fSoul').value.trim()||DEFAULT_SOUL;
-    prefs.mode=$('fMode').value; prefs.listen=$('fListen').value; prefs.rate=$('fRate').value; prefs.pitch=$('fPitch').value; prefs.typeIn=$('fType').checked;
+    prefs.mode=$('fMode').value; prefs.listen=$('fListen').value; prefs.rate=$('fRate').value; prefs.pitch=$('fPitch').value; prefs.typeIn=$('fType').checked; prefs.se=$('fSe').checked; prefs.barge=$('fBarge').checked;
     save('prefs',prefs); renderLog(); $('typeBox').hidden=!prefs.typeIn;
     $('saveMsg').textContent='保存しました。';
     if(prefs.url){ call('state').then(function(st){meds=st; counts=st.counts||null; talkInfo=st.talk||null; takeContacts(st); renderMemory(); $('saveMsg').textContent='保存しました。頭脳につながりました。'; medsTick();})
@@ -568,7 +612,8 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
   var KIND_RE={taxi:/タクシー/,hospital:/病院|医院|クリニック|先生/,pharmacy:/薬局|薬屋/,family:/家族|娘|息子|孫|主人|旦那|妻|嫁|妹|弟|姉|兄/};
   var CALL_RE=/(呼んで|呼びたい|よんで|電話(して|したい|かけ|をかけ|する)|でんわ(して|したい|かけ)|かけて|かけたい)/;
   var NUM_RE=/(番号|ばんごう)/;
-  function takeContacts(st){ if(st&&Array.isArray(st.contacts)){ contacts=st.contacts; if(!contactsLoaded){ contactsLoaded=true; renderContactForm(); } } }
+  function takeVer(st){ if(st&&st.brainVersion){ brainVersion=st.brainVersion; renderVer(); } }
+  function takeContacts(st){ takeVer(st); if(st&&Array.isArray(st.contacts)){ contacts=st.contacts; if(!contactsLoaded){ contactsLoaded=true; renderContactForm(); } } }
   // 電話をかけたい・番号を知りたい、のどちらかで、どの連絡先の話かが分かるときだけ受け持つ
   function contactAsk(text){
     var call=CALL_RE.test(text), num=NUM_RE.test(text)&&/(なんだっけ|何|なに|教えて|おしえて|わすれ|忘れ)/.test(text);
@@ -646,7 +691,7 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
     call('forgetAll').then(function(c){ counts=c; renderMemory(); b.textContent='消しました'; }).catch(function(e){ b.textContent='消せませんでした：'+e.message; });
   });
 
-  applyPrefs(); renderMemory(); renderLog();
+  applyPrefs(); renderMemory(); renderLog(); renderVer();
   if('speechSynthesis' in window){ try{speechSynthesis.getVoices();}catch(e){} }
   setInterval(medsTick,30000);
   setInterval(refreshMeds,5*60000);
