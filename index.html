@@ -91,7 +91,11 @@ button{cursor:pointer}
 .links{display:grid;gap:8px;background:var(--paper);border:2px solid var(--line);border-radius:16px;padding:10px 14px}
 .links-h{font-size:.9rem;color:var(--mute);font-weight:700}
 .links small{color:var(--mute);font-size:.8rem;line-height:1.4}
-.links a{display:block;color:var(--ink);font-weight:700;text-decoration:underline;overflow-wrap:anywhere;padding:4px 0}
+.links a{display:grid;gap:2px;color:var(--ink);text-decoration:none;overflow-wrap:anywhere;padding:12px 14px;border:3px solid var(--ink);border-radius:14px;background:var(--bg)}
+.links a .lt{font-weight:700;font-size:1.05rem}
+.links a .lo{font-weight:700;font-size:1.25rem}
+.links .back{display:flex;gap:10px;align-items:center;font-weight:700;font-size:1rem;line-height:1.4}
+.links .back b{flex:none;display:grid;place-items:center;width:2.2em;height:2.2em;border:3px solid var(--ink);border-radius:10px;font-size:1.1rem}
 .note{background:var(--paper);border:2px solid var(--off);color:var(--ink);border-radius:14px;padding:10px 14px;font-size:1rem}
 
 /* 家族用 */
@@ -182,7 +186,7 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
 
   <div class="cap" id="cap" aria-live="polite">こんにちは。</div>
   <div class="key" id="key" hidden></div>
-  <div class="links" id="links" hidden><div class="links-h">しらべたページ（押すと開きます）</div><div id="linkList"></div><small id="linkNote" hidden></small></div>
+  <div class="links" id="links" hidden><div class="links-h">ページ（「ひらく」を押すと、別の画面で開きます）</div><div id="linkList" style="display:grid;gap:8px"></div><div class="back" id="linkBack"></div><small id="linkNote" hidden></small></div>
   <p class="heard" id="heard"></p>
 
   <button class="take" id="takeBtn" hidden>のんだよ</button>
@@ -202,6 +206,7 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
 
   <details id="family">
     <summary>家族の方へ：せってい と ようす</summary>
+    <p class="log" style="margin:6px 0">調べたページやお知らせのページは、画面の「ひらく」で別の画面に開きます。見おわったら、Android はスマホの「もどる」（◁）、iPhone は画面の下の「タブ」ボタン（□が2つ重なった印）でペンタローの画面をえらぶと、もどれます（ホーム画面のアイコンから開いたときは、左上の「完了」）。</p>
     <form class="form" id="setForm">
       <label for="fUrl">頭脳（Apps Script）のURL<input id="fUrl" inputmode="url" autocomplete="off" placeholder="https://script.google.com/macros/s/…/exec"></label>
       <label for="fKey">合言葉（APP_KEY）<input id="fKey" autocomplete="off"></label>
@@ -303,7 +308,7 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
   if(prefs.mode==='radio') prefs.mode='auto';
   if(!prefs.listen) prefs.listen='normal';
   var counts=null;
-  var SCREEN_VERSION='10/23-7', brainVersion=null, lastTiming='';   // 画面の版。上げ直すたびに変える
+  var SCREEN_VERSION='10/24-1', brainVersion=null, lastTiming='';   // 画面の版。上げ直すたびに変える
   function renderVer(){ $('verLine').textContent='テスト版　画面 '+SCREEN_VERSION+' ／ 頭脳 '+(brainVersion?('v'+brainVersion):'—')+(lastTiming?' ／ '+lastTiming:''); }
   // 頭脳と同じ見分け方：相談・質問は一段上の型で、調べることもあるので少し時間がかかる（調書26）
   var SMART_RE=/[？?]\s*$|教えて|おしえて|どうしたら|どうすれば|どうやって|何がいい|なにがいい|どれがいい|何をあげ|なにをあげ|って何|ってなに|ってなん|とは何|知ってる|しってる|調べて|しらべて|いつから|いつまで|何時から|なんじから|どこで|なぜ|なんで|方法|やり方|相談|困って|こまって|迷って|まよって/;  // 覚えている件数（頭脳から。中身は持たない）
@@ -425,13 +430,34 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
   /* ---------- 口（読み上げ） ---------- */
   var speakGen=0;
   // 考えているあいだに一言だけ言う（聞き直しはしない。本当の返事が来たら speak が止めて話す）
+  // ページは大きなカードで出し、押したら別の画面で開く。見おわったら、スマホのもどり方でペンタローにもどる（調書45）
+  var IOS=/iPhone|iPad|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+  var STANDALONE=navigator.standalone===true||(window.matchMedia&&matchMedia('(display-mode: standalone)').matches);
+  var lastLinks=[], lastNote='', openedAt=0;
+  function backText(){
+    if(IOS) return STANDALONE?['完了','見おわったら、左上の「完了」で ペンタローに もどれます。']:['□□','見おわったら、画面の下の「タブ」ボタン（□が2つ重なった印）を押して、ペンタローの画面を えらんでね。'];
+    return ['◁','見おわったら、スマホの「もどる」（◁）で ペンタローに もどれます。ページの中を進んだら、その回数だけ 押してね。'];
+  }
+  function backSay(){
+    if(IOS) return STANDALONE?'見おわったら、左上の「完了」で もどれるよ。':'見おわったら、画面の下の「タブ」ボタンで、ぼくの画面を えらんでね。';
+    return '見おわったら、スマホの「もどる」で、ぼくの所に もどれるよ。';
+  }
   function showLinks(list,note){
     var box=$('linkList'); box.textContent='';
     $('linkNote').textContent=note||''; $('linkNote').hidden=!note;   // お知らせを言いかえたときの出典（調書39）
-    (Array.isArray(list)?list:[]).filter(function(l){ return l&&/^https:\/\//.test(l.url); }).slice(0,3).forEach(function(l){
-      var a=document.createElement('a'); a.href=l.url; a.target='_blank'; a.rel='noopener'; a.textContent=l.title||l.url; box.appendChild(a);
+    var ok=(Array.isArray(list)?list:[]).filter(function(l){ return l&&/^https:\/\//.test(l.url); }).slice(0,3);
+    ok.forEach(function(l){
+      var a=document.createElement('a'); a.href=l.url; a.target='_blank'; a.rel='noopener';
+      var t=document.createElement('span'); t.className='lt'; t.textContent=l.title||l.url; a.appendChild(t);
+      var o=document.createElement('span'); o.className='lo'; o.textContent='ひらく ›'; a.appendChild(o);
+      a.addEventListener('click',function(){ openedAt=Date.now(); if(phase==='speaking') interrupt(); });   // 開くときは読み上げを止める
+      box.appendChild(a);
     });
+    var bt=backText(), bk=$('linkBack'); bk.textContent='';
+    var bi=document.createElement('b'); bi.textContent=bt[0]; bk.appendChild(bi); bk.appendChild(document.createTextNode(bt[1]));
+    if(ok.length){ lastLinks=ok; lastNote=note||''; }
     $('links').hidden=!box.children.length;
+    return ok.length>0;
   }
   function sayWhileThinking(text){
     if(!('speechSynthesis' in window)) return;
@@ -533,12 +559,14 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
     if(GOMIQ_RE.test(text) && area && area.garbage.length){ var gt=gomiText(text); say(gt,'ゴミ'); logLocal(text,gt); return; }
     if(TIME_RE.test(text)){ var tt=timeText(); say(tt,'いま'); logLocal(text,tt); return; }
     if(DATE_RE.test(text)){ var dt=dateText(); say(dt,'きょう'); logLocal(text,dt); return; }
+    if(AGAIN_PAGE_RE.test(text)&&lastLinks.length){ showLinks(lastLinks,lastNote); var pt='さっきの ページを 出したよ。下の「ひらく」を 押してね。'; say(pt,'ページ'); logLocal(text,pt); return; }
     var cr=contactAsk(text); if(cr){ answerContact(cr,text); return; }
     if(isAizuchi(text)){ var a=AIZUCHI[Math.floor(Math.random()*AIZUCHI.length)]; say(a); logLocal(text,a); return; }
     // テレビかもしれない：相手のいない長い話し声が続いたら、一度だけ確かめる
     if(looksLikeTv(text)){ tvAsked=true; tvPending=true; say('テレビ みてる？ そっと しておこうか？','テレビ？'); return; }
     ask(text);
   }
+  var AGAIN_PAGE_RE=/(もう一回|もう一度|もういっかい|もういちど|さっきの)[^。]*(ページ|開いて|ひらいて)/;
   var QUIET_RE=/(静かにして|しずかにして|そっとして|だまって|黙って|ひとりにして|一人にして)/;
   var TOGETHER_RE=/(お話しして|おはなしして|お話ししよう|おはなししよう|話しかけて|はなしかけて|一緒にいて|いっしょにいて)/;
   var NORMAL_RE=/(ふつうにして|普通にして|もとに戻して|元に戻して)/;
@@ -585,11 +613,12 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
     // 会話は頭脳の側で全部残し、今日と昨日の分・要点・関係する思い出を頭脳が選んで渡す
     call('talk',{mode:mode,listen:prefs.listen,text:userText||'',medsNote:medsNote(),soul:prefs.soul,name:prefs.name}).then(function(r){
       last={say:r.say,keyword:r.keyword,followup:r.followup};
-      showLinks(r.links,r.srcNote);
+      var hasPage=showLinks(r.links,r.srcNote), sayText=r.say;
+      if(hasPage&&!dayFlag('linkHelp')){ setFlag('linkHelp'); sayText=r.say+' '+backSay(); }
       lastTiming='返事 '+((Date.now()-t0)/1000).toFixed(1)+'秒'+(r.tier==='smart'?'（一段上'+(r.searched?'・調べた'+r.searched+'回':'')+'）':''); renderVer();
       if(Array.isArray(r.events)){ events=r.events; renderEventForm(); renderDay(); }
       refreshCounts();
-      speak(r.say,{keyword:r.keyword});
+      speak(sayText,{keyword:r.keyword});
     }).catch(function(e){
       last={say:'ごめんね、いま うまく 考えられないよ。もう一回 おしえてね。',keyword:'もう一回',followup:''};
       speak(last.say,{keyword:last.keyword});
@@ -622,7 +651,7 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
     var d=dueSlot(); $('takeBtn').hidden=!d; if(!d) return false;
     $('takeBtn').dataset.slot=d.id;
     var now=jstMin();
-    if(phase==='listening' && Date.now()-lastHeardAt>=QUIET_MS && (remindAt[d.id]===undefined || now-remindAt[d.id]>=10) && (remindCount[d.id]||0)<4){
+    if(phase==='listening' && !document.hidden && Date.now()-lastHeardAt>=QUIET_MS && (remindAt[d.id]===undefined || now-remindAt[d.id]>=10) && (remindCount[d.id]||0)<4){
       remindAt[d.id]=now;
       var n=(remindCount[d.id]=(remindCount[d.id]||0)+1); // 4回まで。2回目からは短く
       speak(n===1?(prefs.name+'、'+d.label+'の お薬の 時間だよ。のんだら「のんだよ」って おしえてね。'):(prefs.name+'、お薬 わすれて ないかな？'),{keyword:'おくすり',unprompted:true});
@@ -658,7 +687,12 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
   $('sizeBtn').addEventListener('click',function(){ prefs.big=!prefs.big; save('prefs',prefs); applyPrefs(); });
   document.addEventListener('visibilitychange',function(){
     if(document.hidden){ deafen(); }
-    else if(phase!=='idle'){ refreshMeds(); if(phase==='listening') listen(); try{ if(navigator.wakeLock) navigator.wakeLock.request('screen').catch(function(){}); }catch(e){} }
+    else if(phase!=='idle'){
+      var away=openedAt?Date.now()-openedAt:0; openedAt=0;
+      refreshMeds();
+      if(away>=5000&&phase==='listening'){ var bt='おかえり、'+prefs.name+'。ページは 見られた？'; logLocal('',bt); last={say:bt,keyword:'おかえり',followup:''}; speak(bt,{keyword:'おかえり'}); }
+      else if(phase==='listening') listen();
+      try{ if(navigator.wakeLock) navigator.wakeLock.request('screen').catch(function(){}); }catch(e){} }
   });
 
   function applyPrefs(){
@@ -883,7 +917,7 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
   }
   function dayTick(){
     renderDay();
-    if(phase!=='listening'||heardBuf||lastInterim) return false;
+    if(document.hidden||phase!=='listening'||heardBuf||lastInterim) return false;
     if(alertNote(Date.now()-lastHeardAt>=QUIET_MS)) return true;
     if(Date.now()-lastHeardAt<QUIET_MS) return false;
     var now=jstMin(), t=todayKey(), h=Math.floor(now/60);
