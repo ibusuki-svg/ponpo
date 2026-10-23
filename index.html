@@ -90,6 +90,7 @@ button{cursor:pointer}
 .typebox input{flex:1;min-width:0;font:inherit;color:var(--ink);background:var(--paper);border:2px solid var(--line);border-radius:12px;padding:10px 12px}
 .links{display:grid;gap:8px;background:var(--paper);border:2px solid var(--line);border-radius:16px;padding:10px 14px}
 .links-h{font-size:.9rem;color:var(--mute);font-weight:700}
+.links small{color:var(--mute);font-size:.8rem;line-height:1.4}
 .links a{display:block;color:var(--ink);font-weight:700;text-decoration:underline;overflow-wrap:anywhere;padding:4px 0}
 .note{background:var(--paper);border:2px solid var(--off);color:var(--ink);border-radius:14px;padding:10px 14px;font-size:1rem}
 
@@ -181,7 +182,7 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
 
   <div class="cap" id="cap" aria-live="polite">こんにちは。</div>
   <div class="key" id="key" hidden></div>
-  <div class="links" id="links" hidden><div class="links-h">しらべたページ（押すと開きます）</div><div id="linkList"></div></div>
+  <div class="links" id="links" hidden><div class="links-h">しらべたページ（押すと開きます）</div><div id="linkList"></div><small id="linkNote" hidden></small></div>
   <p class="heard" id="heard"></p>
 
   <button class="take" id="takeBtn" hidden>のんだよ</button>
@@ -302,12 +303,13 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
   if(prefs.mode==='radio') prefs.mode='auto';
   if(!prefs.listen) prefs.listen='normal';
   var counts=null;
-  var SCREEN_VERSION='10/23-6', brainVersion=null, lastTiming='';   // 画面の版。上げ直すたびに変える
+  var SCREEN_VERSION='10/23-7', brainVersion=null, lastTiming='';   // 画面の版。上げ直すたびに変える
   function renderVer(){ $('verLine').textContent='テスト版　画面 '+SCREEN_VERSION+' ／ 頭脳 '+(brainVersion?('v'+brainVersion):'—')+(lastTiming?' ／ '+lastTiming:''); }
   // 頭脳と同じ見分け方：相談・質問は一段上の型で、調べることもあるので少し時間がかかる（調書26）
   var SMART_RE=/[？?]\s*$|教えて|おしえて|どうしたら|どうすれば|どうやって|何がいい|なにがいい|どれがいい|何をあげ|なにをあげ|って何|ってなに|ってなん|とは何|知ってる|しってる|調べて|しらべて|いつから|いつまで|何時から|なんじから|どこで|なぜ|なんで|方法|やり方|相談|困って|こまって|迷って|まよって/;  // 覚えている件数（頭脳から。中身は持たない）
   var ASK_END_RE=/(は|って|かな|かしら|ですか|ますか|だっけ|の|なの|んだろう|でしょう|何|なに|いつ|どこ|だれ|誰|どれ|いくら)\s*$/, ASK_WORD_RE=/何|なに|なん|どう|どこ|いつ|だれ|誰|どれ|どの|いくら|なぜ|なんで/;
-  var NEWS_RE=/ニュース|話題|トピック|報道/, WXQ_RE=/天気|てんき|雨|傘|晴れ|雪|予報/, GOMIDAY_RE=/(ゴミ|ごみ)の日|何ごみ|なにごみ|(ゴミ|ごみ)[^。]*(いつ|何|なに|なんよう)/;
+  var NEWS_RE=/ニュース|話題|トピック|報道|ってどうなった|どうなったの|のこと知って|事故|火事|事件|選挙|お知らせ|おしらせ|リコール|何かあった|なにかあった/,   // 頭脳と同じ（調書39：お知らせの控えから答えるので調べない）
+      WXQ_RE=/天気|てんき|雨|傘|晴れ|雪|予報/, GOMIDAY_RE=/(ゴミ|ごみ)の日|何ごみ|なにごみ|(ゴミ|ごみ)[^。]*(いつ|何|なに|なんよう)/;
   function willSearch(t){
     t=String(t||'').trim(); if(t.length<6||NEWS_RE.test(t)||WXQ_RE.test(t)||GOMIDAY_RE.test(t)) return false;   // 天気・ゴミの日は頭脳が表と予報で答える
     return SMART_RE.test(t)||(ASK_END_RE.test(t)&&(ASK_WORD_RE.test(t)||/予定|予約/.test(t)));
@@ -423,8 +425,9 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
   /* ---------- 口（読み上げ） ---------- */
   var speakGen=0;
   // 考えているあいだに一言だけ言う（聞き直しはしない。本当の返事が来たら speak が止めて話す）
-  function showLinks(list){
+  function showLinks(list,note){
     var box=$('linkList'); box.textContent='';
+    $('linkNote').textContent=note||''; $('linkNote').hidden=!note;   // お知らせを言いかえたときの出典（調書39）
     (Array.isArray(list)?list:[]).filter(function(l){ return l&&/^https:\/\//.test(l.url); }).slice(0,3).forEach(function(l){
       var a=document.createElement('a'); a.href=l.url; a.target='_blank'; a.rel='noopener'; a.textContent=l.title||l.url; box.appendChild(a);
     });
@@ -582,7 +585,7 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
     // 会話は頭脳の側で全部残し、今日と昨日の分・要点・関係する思い出を頭脳が選んで渡す
     call('talk',{mode:mode,listen:prefs.listen,text:userText||'',medsNote:medsNote(),soul:prefs.soul,name:prefs.name}).then(function(r){
       last={say:r.say,keyword:r.keyword,followup:r.followup};
-      showLinks(r.links);
+      showLinks(r.links,r.srcNote);
       lastTiming='返事 '+((Date.now()-t0)/1000).toFixed(1)+'秒'+(r.tier==='smart'?'（一段上'+(r.searched?'・調べた'+r.searched+'回':'')+'）':''); renderVer();
       if(Array.isArray(r.events)){ events=r.events; renderEventForm(); renderDay(); }
       refreshCounts();
@@ -788,7 +791,7 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
     }).catch(function(e){ $('cMsg').textContent='保存できませんでした：'+e.message; });
   });
   /* ---------- 予定・ゴミの日・天気・朝のまとめ（調書13〜15） ---------- */
-  var events=[], area=null, areaLoaded=false, WD='日月火水木金土';
+  var events=[], area=null, areaLoaded=false, notice=null, WD='日月火水木金土';
   var GOMI_OUT_RE=/(ゴミ|ごみ)[^。？?]*(出した|だした|捨てた|すてた|出してきた|だしてきた)|^(出した|だした|出してきた|だしてきた)よ?[。！!]*$/;
   var EVQ_RE=/(予定|よてい)[^。]*(ある|何|なに|なん|教えて|おしえて|だっけ|は[？?]?$)/, EVSET_RE=/(入れ|いれ|登録|覚え|おぼえ|消し|けし|やめ)/;
   var GOMIQ_RE=/(ゴミ|ごみ)[^。]*(何|なに|なん|いつ|日|出せる|だせる|出す日|だすひ)/;
@@ -811,6 +814,7 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
     if(!st) return;
     if(Array.isArray(st.events)){ events=st.events; renderEventForm(); }
     if('area' in st){ area=st.area||null; if(!areaLoaded){ areaLoaded=true; renderAreaForm(); } }
+    if('notice' in st) notice=st.notice||null;
     renderDay();
   }
   function renderDay(){
@@ -848,14 +852,40 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
     var ev=events.filter(function(e){return e.date===t;});
     if(ev.length) out.push('予定は、'+ev.map(function(e){return (e.time?hmWords(e.time)+'に ':'')+e.what;}).join('、')+'。');
     if(meds&&meds.settings&&meds.settings.slots.length) out.push('お薬は '+meds.settings.slots.map(function(sl){return sl.label+'（'+hmWords(sl.time)+'）';}).join('、')+'。');
+    if(notice&&notice.top) out.push(notice.top.src+'の お知らせでは、「'+notice.top.title.replace(/[「」]/g,'')+'」だって。');   // くらしのお知らせを1つ（調書39）
     return out.join(' ');
   }
-  function sayMorning(){ setFlag('morning'); var t=morningText(); last={say:t,keyword:'きょう',followup:''}; logLocal('',t); speak(t,{keyword:'きょう',unprompted:true}); }
+  function sayMorning(){ setFlag('morning'); var t=morningText(); last={say:t,keyword:'きょう',followup:''}; logLocal('',t); if(notice&&notice.top) showLinks([{url:notice.top.url,title:notice.top.src+'：'+notice.top.title}],'出典：'+notice.top.src+'のページ（上のボタン）。ペンタローが短く言いかえています。'); speak(t,{keyword:'きょう',unprompted:true}); }
   function speakNote(t,k){ last={say:t,keyword:k,followup:''}; logLocal('',t); speak(t,{keyword:k,unprompted:true}); }
   // 聞いているあいだだけ、予定の声かけ・前の晩のゴミ・開いたままの朝のまとめ（7時）を一つずつ
+  // 警報・地震は自分から一言（調書39）。特別警報は会話の合間を待たずに、ほかは90秒たってから。同じものは一日一度
+  function alertNote(quiet){
+    if(!prefs.url||!notice) return false;
+    var w=notice.warn, q=notice.quake;
+    if(w&&w.list.length&&!dayFlag('warn:'+w.key)){
+      var sp=w.list.some(function(x){return x.special;});
+      if(sp||quiet){
+        setFlag('warn:'+w.key); showLinks([{url:w.url,title:'気象庁：'+w.area+'の警報・注意報'}],'出典：気象庁のページ（上のボタン）');
+        var names=w.list.map(function(x){return x.name;}).join('、');
+        speakNote(sp?('大事な お知らせだよ、'+prefs.name+'。気象庁の 発表で、'+w.area+'に '+names+'が 出ているよ。身の安全を 第一にして、テレビ・ラジオと 市区町村の 知らせを 確かめてね。')
+                    :(prefs.name+'、気象庁の 発表で、'+w.area+'に '+names+'が 出ているよ。市区町村の 知らせや、テレビ・ラジオも 確かめてね。'),'けいほう');
+        return true;
+      }
+    }
+    if(q&&quiet&&!dayFlag('quake:'+q.eid)){
+      setFlag('quake:'+q.eid);
+      var hm=new Intl.DateTimeFormat('ja-JP',{timeZone:'Asia/Tokyo',hour:'numeric',minute:'numeric'}).formatToParts(new Date(q.at));
+      var hh=hm.filter(function(p){return p.type==='hour';})[0].value, mm=hm.filter(function(p){return p.type==='minute';})[0].value;
+      speakNote(prefs.name+'、'+(+hh)+'時'+(+mm?(+mm)+'分':'')+'ごろ、'+(q.place?q.place+'で ':'')+'地震が あったよ。気象庁の 発表では、'+(q.pref||'この あたりの 都道府県')+'で いちばん 大きくて '+q.shindo+'。テレビや ラジオでも 確かめてね。','じしん');
+      return true;
+    }
+    return false;
+  }
   function dayTick(){
     renderDay();
-    if(phase!=='listening'||heardBuf||lastInterim||Date.now()-lastHeardAt<QUIET_MS) return false;
+    if(phase!=='listening'||heardBuf||lastInterim) return false;
+    if(alertNote(Date.now()-lastHeardAt>=QUIET_MS)) return true;
+    if(Date.now()-lastHeardAt<QUIET_MS) return false;
     var now=jstMin(), t=todayKey(), h=Math.floor(now/60);
     if(morningDue()&&h>=7){ sayMorning(); return true; }
     for(var i=0;i<events.length;i++){
