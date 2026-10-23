@@ -88,6 +88,9 @@ button{cursor:pointer}
 .crow{display:grid;grid-template-columns:7em 1fr;gap:6px;padding:8px;border:1px solid var(--line);border-radius:10px}
 .crow .full{grid-column:1 / -1}
 .typebox input{flex:1;min-width:0;font:inherit;color:var(--ink);background:var(--paper);border:2px solid var(--line);border-radius:12px;padding:10px 12px}
+.links{display:grid;gap:8px;background:var(--paper);border:2px solid var(--line);border-radius:16px;padding:10px 14px}
+.links-h{font-size:.9rem;color:var(--mute);font-weight:700}
+.links a{display:block;color:var(--ink);font-weight:700;text-decoration:underline;overflow-wrap:anywhere;padding:4px 0}
 .note{background:var(--paper);border:2px solid var(--off);color:var(--ink);border-radius:14px;padding:10px 14px;font-size:1rem}
 
 /* 家族用 */
@@ -178,6 +181,7 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
 
   <div class="cap" id="cap" aria-live="polite">こんにちは。</div>
   <div class="key" id="key" hidden></div>
+  <div class="links" id="links" hidden><div class="links-h">しらべたページ（押すと開きます）</div><div id="linkList"></div></div>
   <p class="heard" id="heard"></p>
 
   <button class="take" id="takeBtn" hidden>のんだよ</button>
@@ -221,6 +225,8 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
       <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="fType" style="width:auto">文字で話す欄を出す（テスト用。聞き取りに頼らず会話を試せる）</label>
       <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="fSe" style="width:auto">合図の音を鳴らす（話していい合図・聞き取り完了の合図）</label>
       <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="fBarge" style="width:auto">ペンタローが話している途中でも、声で止められる（スピーカーの音を拾うときはオフ）</label>
+      <label for="fBargeLv">声で止める強さ（物音で止まってしまうときは「弱い」）
+        <select id="fBargeLv"><option value="low">弱い（大きな声がしばらく続いたときだけ止まる）</option><option value="mid">ふつう</option><option value="high">強い（小さな声でも止まる）</option></select></label>
       <div class="row"><button type="submit" class="btn">保存する</button><span class="log" id="saveMsg"></span></div>
       <div class="form" style="padding:0">
         <strong style="font-size:.9rem;color:var(--mute)">お話のプラン（払う方が決めます）</strong>
@@ -239,6 +245,7 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
         <div class="log" id="memList"></div>
       </div>
       <div class="row"><button type="button" class="btn" id="forgetBtn">覚えていることを全部消す</button></div>
+      <div class="log">思い出と物の置き場所を消し、それまでの会話もペンタローは使わなくなります（会話の表は家族のために残ります）。予定は「予定」の欄で消せます。</div>
       <div class="form" style="padding:0" id="eventSec">
         <strong style="font-size:.9rem;color:var(--mute)">予定（話して入れたものもここに出ます。朝のまとめで言い、時間の30分前と時間ちょうどに声をかけます。画面を開いているあいだだけ）</strong>
         <div id="evList" style="display:grid;gap:6px" class="log"></div>
@@ -295,10 +302,16 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
   if(prefs.mode==='radio') prefs.mode='auto';
   if(!prefs.listen) prefs.listen='normal';
   var counts=null;
-  var SCREEN_VERSION='10/23-4', brainVersion=null, lastTiming='';   // 画面の版。上げ直すたびに変える
+  var SCREEN_VERSION='10/23-5', brainVersion=null, lastTiming='';   // 画面の版。上げ直すたびに変える
   function renderVer(){ $('verLine').textContent='テスト版　画面 '+SCREEN_VERSION+' ／ 頭脳 '+(brainVersion?('v'+brainVersion):'—')+(lastTiming?' ／ '+lastTiming:''); }
   // 頭脳と同じ見分け方：相談・質問は一段上の型で、調べることもあるので少し時間がかかる（調書26）
   var SMART_RE=/[？?]\s*$|教えて|おしえて|どうしたら|どうすれば|どうやって|何がいい|なにがいい|どれがいい|何をあげ|なにをあげ|って何|ってなに|ってなん|とは何|知ってる|しってる|調べて|しらべて|いつから|いつまで|何時から|なんじから|どこで|なぜ|なんで|方法|やり方|相談|困って|こまって|迷って|まよって/;  // 覚えている件数（頭脳から。中身は持たない）
+  var ASK_END_RE=/(は|って|かな|かしら|ですか|ますか|だっけ|の|なの|んだろう|でしょう|何|なに|いつ|どこ|だれ|誰|どれ|いくら)\s*$/, ASK_WORD_RE=/何|なに|なん|どう|どこ|いつ|だれ|誰|どれ|どの|いくら|なぜ|なんで/;
+  var NEWS_RE=/ニュース|話題|トピック|報道/, WXQ_RE=/天気|てんき|雨|傘|晴れ|雪|予報/, GOMIDAY_RE=/(ゴミ|ごみ)の日|何ごみ|なにごみ|(ゴミ|ごみ)[^。]*(いつ|何|なに|なんよう)/;
+  function willSearch(t){
+    t=String(t||'').trim(); if(t.length<6||NEWS_RE.test(t)||WXQ_RE.test(t)||GOMIDAY_RE.test(t)) return false;   // 天気・ゴミの日は頭脳が表と予報で答える
+    return SMART_RE.test(t)||(ASK_END_RE.test(t)&&(ASK_WORD_RE.test(t)||/予定|予約/.test(t)));
+  }
 
   /* ---------- 状態 ---------- */
   var phase='idle';          // idle / listening / thinking / speaking
@@ -397,11 +410,12 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
         level=lv>level?lv:level*0.85+lv*0.15;                         // 上がるのは速く、下がるのはゆっくり
         $('ring').style.setProperty('--lv',phase==='listening'?level.toFixed(3):'0');
         // 話している途中に相手の声が0.5秒ほど続いたら、読み上げを止めて聞く（スピーカーの音で止まらないよう高めのしきい値）
-        if(phase==='speaking'&&prefs.barge!==false&&!speakingStart(400)){ bargeN=lv>BARGE_LV?bargeN+1:0; if(bargeN>=8){ bargeN=0; interrupt(); } } else bargeN=0;
+        if(phase==='speaking'&&prefs.barge!==false&&!speakingStart(400)){ var bs=BARGE_SET[prefs.bargeLv]||BARGE_SET.mid; bargeN=lv>bs[0]?bargeN+1:0; if(bargeN>=bs[1]){ bargeN=0; interrupt(); } } else bargeN=0;
       },60);
     }).catch(function(){});
   }
-  var BARGE_LV=0.6, bargeN=0, speakT0=0;
+  // 声で止める強さ：[音量の目安, 続く回数（60ミリ秒ごと）]。弱い＝大きな声が長めに続いたときだけ止まる
+  var BARGE_SET={low:[0.75,12],mid:[0.6,8],high:[0.45,6]}, bargeN=0, speakT0=0;
   function speakingStart(ms){ return Date.now()-speakT0<ms; }   // 話し始めの音で止まらない
   function interrupt(){ speakGen++; try{speechSynthesis.cancel();}catch(e){} listen(); startSilence(); }
   function showMicNote(t){ var n=$('micNote'); n.textContent=t; n.hidden=false; }
@@ -409,6 +423,13 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
   /* ---------- 口（読み上げ） ---------- */
   var speakGen=0;
   // 考えているあいだに一言だけ言う（聞き直しはしない。本当の返事が来たら speak が止めて話す）
+  function showLinks(list){
+    var box=$('linkList'); box.textContent='';
+    (Array.isArray(list)?list:[]).filter(function(l){ return l&&/^https:\/\//.test(l.url); }).slice(0,3).forEach(function(l){
+      var a=document.createElement('a'); a.href=l.url; a.target='_blank'; a.rel='noopener'; a.textContent=l.title||l.url; box.appendChild(a);
+    });
+    $('links').hidden=!box.children.length;
+  }
   function sayWhileThinking(text){
     if(!('speechSynthesis' in window)) return;
     try{
@@ -478,9 +499,14 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
   /* ---------- 聞こえたとき ---------- */
   var TAKEN_RE=/(飲んだ|のんだ|飲みました|のみました|飲んだよ|のんだよ)/, NOT_RE=/(まだ|飲んでない|のんでない|飲んでいない|飲まない|のまない)/;
   var AGAIN_RE=/^(え[っー]?|なに|何|もう一回|もういっかい|もう一度|きこえない|聞こえない)[？?！!。]*$/;
+  var TIME_RE=/^(今|いま)?(何時|なんじ)(かな|だっけ|ですか|なの)?[？?]?$|(今|いま)(何時|なんじ)/;
+  var DATE_RE=/(今日|きょう)(は)?(何日|なんにち|何曜|なんよう)|^(何日|なんにち|何曜日|なんようび)(だっけ|かな)?[？?]?$/;
+  function timeText(){ var m=jstMin(); return 'いまは '+Math.floor(m/60)+'時'+(m%60?(m%60)+'分':'ちょうど')+'だよ。'; }
+  function dateText(){ return 'きょうは '+dayWords(todayKey())+'だよ。'; }
+  var lastHeardAt=0, QUIET_MS=90000;   // 調書29：会話が続いているあいだは声かけを待つ
   function heard(text){
     if(phase!=='listening') return;
-    clearTimeout(silenceTimer);
+    clearTimeout(silenceTimer); lastHeardAt=Date.now();
     $('heard').innerHTML='あなた：<b></b>'; $('heard').querySelector('b').textContent=text;
     engage.push({replied:true,len:text.length>=8?text.length:(text.length<=3?2:text.length)}); engage=engage.slice(-20);
     renderLog();
@@ -502,6 +528,8 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
     if(GOMI_OUT_RE.test(text) && !$('gomi').hidden && !$('gomi').classList.contains('eve')){ gomiOut(); logLocal(text,'（ゴミを出した）'); return; }
     if(EVQ_RE.test(text) && !EVSET_RE.test(text) && prefs.url){ var et=eventsText(text); say(et,'よてい'); logLocal(text,et); return; }
     if(GOMIQ_RE.test(text) && area && area.garbage.length){ var gt=gomiText(text); say(gt,'ゴミ'); logLocal(text,gt); return; }
+    if(TIME_RE.test(text)){ var tt=timeText(); say(tt,'いま'); logLocal(text,tt); return; }
+    if(DATE_RE.test(text)){ var dt=dateText(); say(dt,'きょう'); logLocal(text,dt); return; }
     var cr=contactAsk(text); if(cr){ answerContact(cr,text); return; }
     if(isAizuchi(text)){ var a=AIZUCHI[Math.floor(Math.random()*AIZUCHI.length)]; say(a); logLocal(text,a); return; }
     // テレビかもしれない：相手のいない長い話し声が続いたら、一度だけ確かめる
@@ -538,20 +566,23 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
   /* ---------- 頭脳（Apps Script 経由で Claude） ---------- */
   function call(action, extra){
     var body=Object.assign({action:action,key:prefs.key},extra||{});
-    return fetch(prefs.url,{method:'POST',body:JSON.stringify(body),redirect:'follow'})
-      .then(function(r){return r.json();})
+    // 頭脳から返事が来ないまま止まらないよう、待つのは30秒まで（調書18。調べものは10秒ほどかかる）
+    var ctl=window.AbortController?new AbortController():null, timer=ctl?setTimeout(function(){ ctl.abort(); },30000):null;
+    return fetch(prefs.url,{method:'POST',body:JSON.stringify(body),redirect:'follow',signal:ctl?ctl.signal:undefined})
+      .then(function(r){ clearTimeout(timer); return r.json(); },function(e){ clearTimeout(timer); throw new Error(e&&e.name==='AbortError'?'時間がかかりすぎました':'つながりませんでした'); })
       .then(function(j){ if(!j.ok) throw new Error(j.error||'うまく いきませんでした'); return j.data; });
   }
   function ask(userText){
     var mode=renderLog();
     deafen(); setPhase('thinking');
-    var smartAsk=!!userText&&userText.length>=6&&SMART_RE.test(userText), t0=Date.now();
-    $('cap').textContent=smartAsk?'ちょっと しらべてみるね…':'…'; $('key').hidden=true; // 前の返事と混ざらないように
+    var smartAsk=!!userText&&willSearch(userText), t0=Date.now();
+    $('cap').textContent=smartAsk?'ちょっと しらべてみるね…':'…'; $('key').hidden=true; $('links').hidden=true; // 前の返事と混ざらないように
     if(smartAsk) sayWhileThinking('ちょっと しらべてくるね。すこし まってね。');
     if(!prefs.url){ return offline(userText,mode); }
     // 会話は頭脳の側で全部残し、今日と昨日の分・要点・関係する思い出を頭脳が選んで渡す
     call('talk',{mode:mode,listen:prefs.listen,text:userText||'',medsNote:medsNote(),soul:prefs.soul,name:prefs.name}).then(function(r){
       last={say:r.say,keyword:r.keyword,followup:r.followup};
+      showLinks(r.links);
       lastTiming='返事 '+((Date.now()-t0)/1000).toFixed(1)+'秒'+(r.tier==='smart'?'（一段上'+(r.searched?'・調べた'+r.searched+'回':'')+'）':''); renderVer();
       if(Array.isArray(r.events)){ events=r.events; renderEventForm(); renderDay(); }
       refreshCounts();
@@ -588,7 +619,7 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
     var d=dueSlot(); $('takeBtn').hidden=!d; if(!d) return false;
     $('takeBtn').dataset.slot=d.id;
     var now=jstMin();
-    if(phase==='listening' && (remindAt[d.id]===undefined || now-remindAt[d.id]>=10) && (remindCount[d.id]||0)<4){
+    if(phase==='listening' && Date.now()-lastHeardAt>=QUIET_MS && (remindAt[d.id]===undefined || now-remindAt[d.id]>=10) && (remindCount[d.id]||0)<4){
       remindAt[d.id]=now;
       var n=(remindCount[d.id]=(remindCount[d.id]||0)+1); // 4回まで。2回目からは短く
       speak(n===1?(prefs.name+'、'+d.label+'の お薬の 時間だよ。のんだら「のんだよ」って おしえてね。'):(prefs.name+'、お薬 わすれて ないかな？'),{keyword:'おくすり',unprompted:true});
@@ -634,13 +665,13 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
     $('fUrl').value=prefs.url; $('fKey').value=prefs.key; $('fName').value=prefs.name;
     $('fSoul').value=prefs.soul; $('fMode').value=prefs.mode; $('fListen').value=prefs.listen; $('fRate').value=prefs.rate; $('fPitch').value=prefs.pitch;
     $('fType').checked=!!prefs.typeIn; $('typeBox').hidden=!prefs.typeIn;
-    $('fSe').checked=prefs.se!==false; $('fBarge').checked=prefs.barge!==false;
+    $('fSe').checked=prefs.se!==false; $('fBarge').checked=prefs.barge!==false; $('fBargeLv').value=prefs.bargeLv||'mid';
   }
   $('setForm').addEventListener('submit',function(e){
     e.preventDefault();
     prefs.url=$('fUrl').value.trim(); prefs.key=$('fKey').value.trim();
     prefs.name=$('fName').value.trim()||'イブさん'; prefs.soul=$('fSoul').value.trim()||DEFAULT_SOUL;
-    prefs.mode=$('fMode').value; prefs.listen=$('fListen').value; prefs.rate=$('fRate').value; prefs.pitch=$('fPitch').value; prefs.typeIn=$('fType').checked; prefs.se=$('fSe').checked; prefs.barge=$('fBarge').checked;
+    prefs.mode=$('fMode').value; prefs.listen=$('fListen').value; prefs.rate=$('fRate').value; prefs.pitch=$('fPitch').value; prefs.typeIn=$('fType').checked; prefs.se=$('fSe').checked; prefs.barge=$('fBarge').checked; prefs.bargeLv=$('fBargeLv').value;
     save('prefs',prefs); renderLog(); $('typeBox').hidden=!prefs.typeIn;
     $('saveMsg').textContent='保存しました。';
     if(prefs.url){ call('state').then(function(st){meds=st; counts=st.counts||null; talkInfo=st.talk||null; takeContacts(st); takeDay(st); renderMemory(); $('saveMsg').textContent='保存しました。頭脳につながりました。'; medsTick();})
@@ -824,7 +855,7 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
   // 聞いているあいだだけ、予定の声かけ・前の晩のゴミ・開いたままの朝のまとめ（7時）を一つずつ
   function dayTick(){
     renderDay();
-    if(phase!=='listening'||heardBuf||lastInterim) return false;
+    if(phase!=='listening'||heardBuf||lastInterim||Date.now()-lastHeardAt<QUIET_MS) return false;
     var now=jstMin(), t=todayKey(), h=Math.floor(now/60);
     if(morningDue()&&h>=7){ sayMorning(); return true; }
     for(var i=0;i<events.length;i++){
@@ -894,8 +925,8 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
     }).filter(function(g){ return g.kind||g.days; });
     $('aMsg').textContent='調べています…';
     call('saveArea',{zip:$('aZip').value,chome:$('aChome').value,garbage:list,pin:$('aPin').value}).then(function(a){
-      area=a; renderAreaForm(); renderDay(); $('aPin').value=''; $('aMsg').textContent='保存しました。';
-    }).catch(function(e){ $('aMsg').textContent='保存できませんでした：'+e.message; });
+      area=a; renderAreaForm(); renderDay(); $('aPin').value=''; $('aMsg').textContent='保存しました。'; $('aMsg').style.color=''; $('aMsg').style.fontWeight='';
+    }).catch(function(e){ $('aMsg').textContent='保存できませんでした：'+e.message; $('aMsg').style.color='var(--off)'; $('aMsg').style.fontWeight='700'; });
   });
 
   var forgetArmed=false;
