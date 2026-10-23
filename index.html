@@ -295,8 +295,10 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
   if(prefs.mode==='radio') prefs.mode='auto';
   if(!prefs.listen) prefs.listen='normal';
   var counts=null;
-  var SCREEN_VERSION='10/23-3', brainVersion=null;   // 画面の版。上げ直すたびに変える
-  function renderVer(){ $('verLine').textContent='テスト版　画面 '+SCREEN_VERSION+' ／ 頭脳 '+(brainVersion?('v'+brainVersion):'—'); }  // 覚えている件数（頭脳から。中身は持たない）
+  var SCREEN_VERSION='10/23-4', brainVersion=null, lastTiming='';   // 画面の版。上げ直すたびに変える
+  function renderVer(){ $('verLine').textContent='テスト版　画面 '+SCREEN_VERSION+' ／ 頭脳 '+(brainVersion?('v'+brainVersion):'—')+(lastTiming?' ／ '+lastTiming:''); }
+  // 頭脳と同じ見分け方：相談・質問は一段上の型で、調べることもあるので少し時間がかかる（調書26）
+  var SMART_RE=/[？?]\s*$|教えて|おしえて|どうしたら|どうすれば|どうやって|何がいい|なにがいい|どれがいい|何をあげ|なにをあげ|って何|ってなに|ってなん|とは何|知ってる|しってる|調べて|しらべて|いつから|いつまで|何時から|なんじから|どこで|なぜ|なんで|方法|やり方|相談|困って|こまって|迷って|まよって/;  // 覚えている件数（頭脳から。中身は持たない）
 
   /* ---------- 状態 ---------- */
   var phase='idle';          // idle / listening / thinking / speaking
@@ -406,6 +408,16 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
 
   /* ---------- 口（読み上げ） ---------- */
   var speakGen=0;
+  // 考えているあいだに一言だけ言う（聞き直しはしない。本当の返事が来たら speak が止めて話す）
+  function sayWhileThinking(text){
+    if(!('speechSynthesis' in window)) return;
+    try{
+      var u=new SpeechSynthesisUtterance(text);
+      u.lang='ja-JP'; u.rate=parseFloat(prefs.rate); u.pitch=parseFloat(prefs.pitch); u.volume=1;
+      var v=speechSynthesis.getVoices().filter(function(x){return /^ja/i.test(x.lang);}); if(v.length) u.voice=v[0];
+      speechSynthesis.speak(u);
+    }catch(e){}
+  }
   function speak(text, opt){
     opt=opt||{};
     var gen=++speakGen;
@@ -533,11 +545,14 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
   function ask(userText){
     var mode=renderLog();
     deafen(); setPhase('thinking');
-    $('cap').textContent='…'; $('key').hidden=true; // 前の返事と混ざらないように
+    var smartAsk=!!userText&&userText.length>=6&&SMART_RE.test(userText), t0=Date.now();
+    $('cap').textContent=smartAsk?'ちょっと しらべてみるね…':'…'; $('key').hidden=true; // 前の返事と混ざらないように
+    if(smartAsk) sayWhileThinking('ちょっと しらべてくるね。すこし まってね。');
     if(!prefs.url){ return offline(userText,mode); }
     // 会話は頭脳の側で全部残し、今日と昨日の分・要点・関係する思い出を頭脳が選んで渡す
     call('talk',{mode:mode,listen:prefs.listen,text:userText||'',medsNote:medsNote(),soul:prefs.soul,name:prefs.name}).then(function(r){
       last={say:r.say,keyword:r.keyword,followup:r.followup};
+      lastTiming='返事 '+((Date.now()-t0)/1000).toFixed(1)+'秒'+(r.tier==='smart'?'（一段上'+(r.searched?'・調べた'+r.searched+'回':'')+'）':''); renderVer();
       if(Array.isArray(r.events)){ events=r.events; renderEventForm(); renderDay(); }
       refreshCounts();
       speak(r.say,{keyword:r.keyword});
