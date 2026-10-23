@@ -49,6 +49,8 @@ button{cursor:pointer}
 .ring::before{content:"";position:absolute;inset:0;border-radius:50%;border:8px solid var(--st,var(--line));opacity:.9;transition:border-color .3s}
 .ring.listening::before{animation:pulse 1.8s ease-in-out infinite}
 @keyframes pulse{0%,100%{transform:scale(1);opacity:.9}50%{transform:scale(1.06);opacity:.45}}
+/* マイクの音量が取れるときは、輪の濃さと太さで声が届いているかを見せる（取れないときは上の点滅のまま） */
+.meter .ring.listening::before{animation:none;opacity:calc(.3 + .7 * var(--lv,0));border-width:calc(6px + 10px * var(--lv,0));transition:opacity .08s linear,border-width .08s linear}
 .ring svg{width:140px;height:auto}
 .status{font-family:var(--display);font-weight:900;font-size:1.35rem;color:var(--st,var(--mute));letter-spacing:.06em}
 .listening{--st:var(--listen)} .thinking{--st:var(--think)} .speaking{--st:var(--speak)} .off{--st:var(--off)}
@@ -77,6 +79,13 @@ button{cursor:pointer}
 .take{background:var(--go);color:var(--go-ink);border:0;border-radius:999px;padding:18px;font-family:var(--display);
   font-weight:900;font-size:1.9rem;letter-spacing:.06em;box-shadow:0 6px 0 var(--go-edge)}
 .take:active{transform:translateY(4px);box-shadow:0 2px 0 var(--go-edge)}
+.typebox{display:flex;gap:8px}
+.callbox{display:grid;gap:10px}
+.callbox a.take{display:block;text-align:center;text-decoration:none}
+.callbox .memo{text-align:center;color:var(--mute);font-size:1rem}
+.crow{display:grid;grid-template-columns:7em 1fr;gap:6px;padding:8px;border:1px solid var(--line);border-radius:10px}
+.crow .full{grid-column:1 / -1}
+.typebox input{flex:1;min-width:0;font:inherit;color:var(--ink);background:var(--paper);border:2px solid var(--line);border-radius:12px;padding:10px 12px}
 .note{background:var(--paper);border:2px solid var(--off);color:var(--ink);border-radius:14px;padding:10px 14px;font-size:1rem}
 
 /* 家族用 */
@@ -150,6 +159,14 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
     <button id="slowBtn">ゆっくり</button>
   </div>
   <div class="note" id="micNote" hidden></div>
+  <div class="callbox" id="callBox" hidden>
+    <div id="callLinks"></div>
+    <button type="button" class="btn" id="callClose">やめる</button>
+  </div>
+  <form class="typebox" id="typeBox" hidden>
+    <input id="typeIn" autocomplete="off" placeholder="ここに打って送る（テスト用）" aria-label="文字で話す">
+    <button type="submit" class="btn">送る</button>
+  </form>
 
   <details id="family">
     <summary>家族の方へ：せってい と ようす</summary>
@@ -174,6 +191,7 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
         <select id="fRate"><option value="0.75">ゆっくり</option><option value="0.65">とてもゆっくり</option><option value="0.9">ふつう</option></select></label>
       <label for="fPitch">声の高さ（高い音が聞こえにくい方は「低め」）
         <select id="fPitch"><option value="0.85">低め</option><option value="1">ふつう</option><option value="1.3">高め</option></select></label>
+      <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="fType" style="width:auto">文字で話す欄を出す（テスト用。聞き取りに頼らず会話を試せる）</label>
       <div class="row"><button type="submit" class="btn">保存する</button><span class="log" id="saveMsg"></span></div>
       <div class="form" style="padding:0">
         <strong style="font-size:.9rem;color:var(--mute)">お話のプラン（払う方が決めます）</strong>
@@ -192,6 +210,13 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
         <div class="log" id="memList"></div>
       </div>
       <div class="row"><button type="button" class="btn" id="forgetBtn">覚えていることを全部消す</button></div>
+      <div class="form" style="padding:0" id="contactSec">
+        <strong style="font-size:.9rem;color:var(--mute)">よく使う連絡先（タクシー・病院など。電話は本人がボタンを押したときだけかかります）</strong>
+        <div id="cList" style="display:grid;gap:8px"></div>
+        <div class="row"><button type="button" class="btn" id="cAdd">連絡先をふやす</button></div>
+        <label for="cPin">家族用の暗証番号<input id="cPin" type="password" inputmode="numeric" autocomplete="off"></label>
+        <div class="row"><button type="button" class="btn" id="cSave">連絡先を保存</button><span class="log" id="cMsg"></span></div>
+      </div>
     </form>
   </details>
 </main>
@@ -268,6 +293,25 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
     try{ rec.start(); }catch(e){}
   }
   function deafen(){ if(rec&&recActive){ try{rec.abort();}catch(e){} } }
+  // 音量の目安：聞いているあいだだけ、声の大きさを輪に映す。マイクを別に開けない端末では何もしない
+  function startMeter(){
+    if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia) return;
+    navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true}}).then(function(stream){
+      var AC=window.AudioContext||window.webkitAudioContext; if(!AC) return;
+      var ac=new AC(), an=ac.createAnalyser(); an.fftSize=512;
+      ac.createMediaStreamSource(stream).connect(an);
+      var buf=new Float32Array(an.fftSize), level=0;
+      document.documentElement.classList.add('meter');
+      setInterval(function(){
+        an.getFloatTimeDomainData(buf);
+        var sum=0; for(var i=0;i<buf.length;i++) sum+=buf[i]*buf[i];
+        var db=20*Math.log10(Math.sqrt(sum/buf.length)+1e-8);       // 静か:-60dB 前後、ふつうの声:-25dB 前後
+        var lv=Math.max(0,Math.min(1,(db+60)/40));
+        level=lv>level?lv:level*0.85+lv*0.15;                         // 上がるのは速く、下がるのはゆっくり
+        $('ring').style.setProperty('--lv',phase==='listening'?level.toFixed(3):'0');
+      },60);
+    }).catch(function(){});
+  }
   function showMicNote(t){ var n=$('micNote'); n.textContent=t; n.hidden=false; }
 
   /* ---------- 口（読み上げ） ---------- */
@@ -353,6 +397,7 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
     if(due && TAKEN_RE.test(text) && !NOT_RE.test(text) && !DIDI_RE.test(text)){ markTaken(due); return; }
     if(/薬|くすり/.test(text) && MEDQ_RE.test(text)){ say('お薬の 飲み方は、お医者さんか 薬局の人に きこうね。','きいてみよう'); return; }
     if(DIDI_RE.test(text) && meds){ say(takenReport(),'おくすり'); return; }
+    var cr=contactAsk(text); if(cr){ answerContact(cr,text); return; }
     if(isAizuchi(text)){ var a=AIZUCHI[Math.floor(Math.random()*AIZUCHI.length)]; say(a); logLocal(text,a); return; }
     // テレビかもしれない：相手のいない長い話し声が続いたら、一度だけ確かめる
     if(looksLikeTv(text)){ tvAsked=true; tvPending=true; say('テレビ みてる？ そっと しておこうか？','テレビ？'); return; }
@@ -395,6 +440,7 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
   function ask(userText){
     var mode=renderLog();
     deafen(); setPhase('thinking');
+    $('cap').textContent='…'; $('key').hidden=true; // 前の返事と混ざらないように
     if(!prefs.url){ return offline(userText,mode); }
     // 会話は頭脳の側で全部残し、今日と昨日の分・要点・関係する思い出を頭脳が選んで渡す
     call('talk',{mode:mode,listen:prefs.listen,text:userText||'',medsNote:medsNote(),soul:prefs.soul,name:prefs.name}).then(function(r){
@@ -427,7 +473,7 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
   function medsNote(){ var d=dueSlot(); return d?('いまは「'+d.label+'」のお薬の時間で、まだ飲んでいない。話の切れ目でやさしく思い出させてよい。飲むかどうか・量は本人とお医者さんが決めること。'):''; }
   function refreshMeds(){
     if(!prefs.url) return;
-    call('state').then(function(st){ meds=st; counts=st.counts||counts; talkInfo=st.talk||talkInfo; renderMemory(); medsTick(); }).catch(function(){});
+    call('state').then(function(st){ meds=st; counts=st.counts||counts; talkInfo=st.talk||talkInfo; takeContacts(st); renderMemory(); medsTick(); }).catch(function(){});
   }
   function medsTick(){
     var d=dueSlot(); $('takeBtn').hidden=!d; if(!d) return;
@@ -453,7 +499,7 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
   $('startBtn').addEventListener('click',function(){
     $('start').hidden=true;
     try{ if(navigator.wakeLock) navigator.wakeLock.request('screen').then(function(w){wakeLock=w;}).catch(function(){}); }catch(e){}
-    setupEar(); renderLog(); refreshMeds();
+    setupEar(); startMeter(); renderLog(); refreshMeds();
     ask(null);
   });
   $('ring').addEventListener('click',function(){ // さえぎって聞く
@@ -476,15 +522,16 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
     $('sizeBtn').setAttribute('aria-pressed',prefs.big?'true':'false');
     $('fUrl').value=prefs.url; $('fKey').value=prefs.key; $('fName').value=prefs.name;
     $('fSoul').value=prefs.soul; $('fMode').value=prefs.mode; $('fListen').value=prefs.listen; $('fRate').value=prefs.rate; $('fPitch').value=prefs.pitch;
+    $('fType').checked=!!prefs.typeIn; $('typeBox').hidden=!prefs.typeIn;
   }
   $('setForm').addEventListener('submit',function(e){
     e.preventDefault();
     prefs.url=$('fUrl').value.trim(); prefs.key=$('fKey').value.trim();
     prefs.name=$('fName').value.trim()||'イブさん'; prefs.soul=$('fSoul').value.trim()||DEFAULT_SOUL;
-    prefs.mode=$('fMode').value; prefs.listen=$('fListen').value; prefs.rate=$('fRate').value; prefs.pitch=$('fPitch').value;
-    save('prefs',prefs); renderLog();
+    prefs.mode=$('fMode').value; prefs.listen=$('fListen').value; prefs.rate=$('fRate').value; prefs.pitch=$('fPitch').value; prefs.typeIn=$('fType').checked;
+    save('prefs',prefs); renderLog(); $('typeBox').hidden=!prefs.typeIn;
     $('saveMsg').textContent='保存しました。';
-    if(prefs.url){ call('state').then(function(st){meds=st; counts=st.counts||null; talkInfo=st.talk||null; renderMemory(); $('saveMsg').textContent='保存しました。頭脳につながりました。'; medsTick();})
+    if(prefs.url){ call('state').then(function(st){meds=st; counts=st.counts||null; talkInfo=st.talk||null; takeContacts(st); renderMemory(); $('saveMsg').textContent='保存しました。頭脳につながりました。'; medsTick();})
       .catch(function(err){ $('saveMsg').textContent='保存しました。ただし頭脳につながりません：'+err.message; }); }
   });
   function renderMemory(){
@@ -506,6 +553,90 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
     call('plan',{plan:$('fPlan').value,pin:$('fPin').value}).then(function(r){
       $('fPin').value=''; $('planMsg').textContent=r.plan+'往復のプランにしました。'; refreshCounts();
     }).catch(function(e){ $('planMsg').textContent='変えられませんでした：'+e.message; });
+  });
+  // テスト用：打った文字を、聞こえた言葉と同じように扱う（話している途中なら止めて聞く）
+  $('typeBox').addEventListener('submit',function(e){
+    e.preventDefault();
+    var t=$('typeIn').value.trim(); if(!t||phase==='thinking'||phase==='idle') return;
+    $('typeIn').value='';
+    speakGen++; try{speechSynthesis.cancel();}catch(err){}
+    deafen(); phase='listening'; heard(t);
+  });
+  /* ---------- よく使う連絡先 ---------- */
+  var contacts=[], contactsLoaded=false;
+  var KIND_NAME={taxi:'タクシー',hospital:'病院',pharmacy:'薬局',family:'家族',other:'その他'};
+  var KIND_RE={taxi:/タクシー/,hospital:/病院|医院|クリニック|先生/,pharmacy:/薬局|薬屋/,family:/家族|娘|息子|孫|主人|旦那|妻|嫁|妹|弟|姉|兄/};
+  var CALL_RE=/(呼んで|呼びたい|よんで|電話(して|したい|かけ|をかけ|する)|でんわ(して|したい|かけ)|かけて|かけたい)/;
+  var NUM_RE=/(番号|ばんごう)/;
+  function takeContacts(st){ if(st&&Array.isArray(st.contacts)){ contacts=st.contacts; if(!contactsLoaded){ contactsLoaded=true; renderContactForm(); } } }
+  // 電話をかけたい・番号を知りたい、のどちらかで、どの連絡先の話かが分かるときだけ受け持つ
+  function contactAsk(text){
+    var call=CALL_RE.test(text), num=NUM_RE.test(text)&&/(なんだっけ|何|なに|教えて|おしえて|わすれ|忘れ)/.test(text);
+    if(!call&&!num) return null;
+    var byName=contacts.filter(function(c){return c.name&&text.indexOf(c.name)>=0;});
+    var kinds=Object.keys(KIND_RE).filter(function(k){return KIND_RE[k].test(text);});
+    if(!byName.length&&!kinds.length) return null;
+    var list=byName.length?byName:contacts.filter(function(c){return kinds.indexOf(c.kind)>=0;});
+    return {num:num&&!call,list:list,kind:kinds[0]||(byName[0]&&byName[0].kind)};
+  }
+  function readTel(tel){ return tel.split('-').map(function(g){return g.split('').join(' ');}).join('、の、'); }
+  function answerContact(cr,text){
+    var t;
+    if(!cr.list.length){
+      // 「分からない」で終わらせず、いまできることを言う
+      t={taxi:'タクシーの番号は、まだ聞いてないんだ。玄関や電話のそばに、タクシーのカードや紙が はってないかな？',
+         hospital:'病院の番号は、まだ聞いてないんだ。診察券の うらに、番号が 書いてあることが多いよ。',
+         pharmacy:'薬局の番号は、まだ聞いてないんだ。お薬の袋や お薬手帳に、番号が 書いてあることが多いよ。',
+         family:'その人の番号は、まだ聞いてないんだ。電話の 履歴か 電話帳に 入ってないかな？'}[cr.kind]
+        ||'その番号は、まだ聞いてないんだ。番号が書いてある紙が ないか、いっしょに 思い出してみよう。';
+      t+=' 見つかったら、家族の方に 設定で入れてもらおうね。';
+      hideCall();
+    } else if(cr.num){
+      var c=cr.list[0]; t=c.name+'の番号は、'+readTel(c.tel)+'、だよ。'; showCall(cr.list.slice(0,3));
+    } else if(cr.list.length===1){
+      t=cr.list[0].name+'に 電話するね。かけるときは、下の 大きいボタンを 押してね。'; showCall(cr.list);
+    } else {
+      t='だれに かける？ 下のボタンから 選んでね。'; showCall(cr.list.slice(0,3));
+    }
+    say(t,'でんわ'); logLocal(text,cr.num?'（番号を読み上げた）':t);
+  }
+  var callTimer=null;
+  function showCall(list){
+    var box=$('callLinks'); box.textContent='';
+    list.forEach(function(c){
+      var a=document.createElement('a'); a.className='take'; a.href='tel:'+c.tel.replace(/[^0-9+]/g,'');
+      a.textContent=c.name+' に でんわ'; box.appendChild(a);
+      if(c.memo){ var m=document.createElement('div'); m.className='memo'; m.textContent='メモ：'+c.memo; box.appendChild(m); }
+    });
+    $('callBox').hidden=false; clearTimeout(callTimer); callTimer=setTimeout(hideCall,120000);
+  }
+  function hideCall(){ $('callBox').hidden=true; clearTimeout(callTimer); }
+  $('callClose').addEventListener('click',hideCall);
+  // 設定画面の連絡先の欄
+  function contactRow(c){
+    c=c||{kind:'taxi',name:'',tel:'',memo:''};
+    var d=document.createElement('div'); d.className='crow';
+    var sel=document.createElement('select'); sel.className='ck';
+    Object.keys(KIND_NAME).forEach(function(k){ var o=document.createElement('option'); o.value=k; o.textContent=KIND_NAME[k]; sel.appendChild(o); });
+    sel.value=KIND_NAME[c.kind]?c.kind:'other';
+    var nm=document.createElement('input'); nm.className='cn'; nm.placeholder='名前（例：いつものタクシー）'; nm.maxLength=20; nm.value=c.name;
+    var tl=document.createElement('input'); tl.className='ct full'; tl.placeholder='電話番号'; tl.inputMode='tel'; tl.maxLength=20; tl.value=c.tel;
+    var mm=document.createElement('input'); mm.className='cm full'; mm.placeholder='メモ（例：玄関の前に来てもらう）'; mm.maxLength=60; mm.value=c.memo||'';
+    var del=document.createElement('button'); del.type='button'; del.className='btn full'; del.textContent='この連絡先を消す';
+    del.addEventListener('click',function(){ d.remove(); });
+    [sel,nm,tl,mm,del].forEach(function(x){ d.appendChild(x); });
+    return d;
+  }
+  function renderContactForm(){ var l=$('cList'); l.textContent=''; contacts.forEach(function(c){ l.appendChild(contactRow(c)); }); }
+  $('cAdd').addEventListener('click',function(){ $('cList').appendChild(contactRow()); });
+  $('cSave').addEventListener('click',function(){
+    if(!prefs.url){ $('cMsg').textContent='頭脳につながっていません'; return; }
+    var list=[].map.call($('cList').querySelectorAll('.crow'),function(d){
+      return {kind:d.querySelector('.ck').value,name:d.querySelector('.cn').value.trim(),tel:d.querySelector('.ct').value.trim(),memo:d.querySelector('.cm').value.trim()};
+    });
+    call('saveContacts',{list:list,pin:$('cPin').value}).then(function(c){
+      contacts=c; renderContactForm(); $('cPin').value=''; $('cMsg').textContent=c.length+' 件 保存しました。';
+    }).catch(function(e){ $('cMsg').textContent='保存できませんでした：'+e.message; });
   });
   var forgetArmed=false;
   $('forgetBtn').addEventListener('click',function(){
