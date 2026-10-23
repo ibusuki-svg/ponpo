@@ -108,6 +108,29 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
 .start h1{font-family:var(--display);margin:0;font-size:2rem}
 .start p{margin:0;color:var(--mute);font-size:1.05rem}
 .start .take{width:100%}
+
+/* ゴミの日のカード（調書14）：種類ごとの色の帯と、こちらで作った絵。朝は「出したよ」で消える */
+:root{--g-burn:#C94F26;--g-noburn:#2F6FBF;--g-recycle:#1F7F54;--g-big:#7D55BE;--g-other:#5F6B78}
+@media (prefers-color-scheme: dark){:root{--g-burn:#F08A62;--g-noburn:#7FB0F0;--g-recycle:#5FD3A0;--g-big:#B79BEA;--g-other:#A9B5C3}}
+.gomi{background:var(--paper);border:3px solid var(--line);border-radius:22px;overflow:hidden;display:grid}
+.gomi .band{display:flex;align-items:center;gap:14px;padding:14px 18px;border-left:16px solid var(--gc)}
+.gomi .band+.band{border-top:2px solid var(--line)}
+.gomi svg{width:60px;height:60px;flex:none;color:var(--gc)}
+.gomi .when{font-family:var(--display);font-weight:700;color:var(--mute);font-size:1.05rem}
+.gomi .kind{font-family:var(--display);font-weight:900;font-size:calc(var(--cap) * 1.15);line-height:1.25}
+.gomi .how{font-size:1.05rem}
+.gomi .take{margin:4px 14px 14px}
+.gomi.eve .kind{font-size:var(--cap)}
+.g-burn{--gc:var(--g-burn)} .g-noburn{--gc:var(--g-noburn)} .g-recycle{--gc:var(--g-recycle)} .g-big{--gc:var(--g-big)} .g-other{--gc:var(--g-other)}
+.top{justify-content:space-between;align-items:flex-start}
+.wx{font-size:.95rem;color:var(--mute);line-height:1.4;min-width:0}
+.wx b{color:var(--ink);font-weight:700}
+.wx small{display:block;font-size:.72rem}
+.evrow{display:flex;gap:8px;align-items:center;justify-content:space-between;border:1px solid var(--line);border-radius:10px;padding:6px 10px;font-size:.95rem}
+.grow{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:8px;border:1px solid var(--line);border-radius:10px}
+.grow .full{grid-column:1 / -1}
+.evadd{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.evadd .full{grid-column:1 / -1}
 </style>
 </head>
 <body>
@@ -142,7 +165,7 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
 </div>
 
 <main class="wrap">
-  <div class="top"><div class="topcol"><button class="small-btn" id="sizeBtn" aria-pressed="false">文字を大きく</button><div class="ver" id="verLine"></div></div></div>
+  <div class="top"><div class="wx" id="wxLine"></div><div class="topcol"><button class="small-btn" id="sizeBtn" aria-pressed="false">文字を大きく</button><div class="ver" id="verLine"></div></div></div>
 
   <section class="hero" id="hero">
     <button class="ring" id="ring" aria-label="ペンタロー。押すと話をさえぎって聞きます">
@@ -150,6 +173,8 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
     </button>
     <div class="status" id="status" aria-live="polite">まってるよ</div>
   </section>
+
+  <section class="gomi" id="gomi" hidden aria-live="polite"></section>
 
   <div class="cap" id="cap" aria-live="polite">こんにちは。</div>
   <div class="key" id="key" hidden></div>
@@ -214,6 +239,27 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
         <div class="log" id="memList"></div>
       </div>
       <div class="row"><button type="button" class="btn" id="forgetBtn">覚えていることを全部消す</button></div>
+      <div class="form" style="padding:0" id="eventSec">
+        <strong style="font-size:.9rem;color:var(--mute)">予定（話して入れたものもここに出ます。朝のまとめで言い、時間の30分前と時間ちょうどに声をかけます。画面を開いているあいだだけ）</strong>
+        <div id="evList" style="display:grid;gap:6px" class="log"></div>
+        <div class="evadd">
+          <label for="evDate">日にち<input type="date" id="evDate"></label>
+          <label for="evTime">時刻（なくてもよい）<input type="time" id="evTime"></label>
+          <label for="evWhat" class="full">中身<input id="evWhat" maxlength="40" placeholder="例：歯医者、孫が来る"></label>
+        </div>
+        <div class="row"><button type="button" class="btn" id="evAdd">予定を入れる</button><span class="log" id="evMsg"></span></div>
+      </div>
+      <div class="form" style="padding:0" id="areaSec">
+        <strong style="font-size:.9rem;color:var(--mute)">地域とゴミの日（ゴミの日の朝に大きく出して知らせます。天気は気象庁の予報です）</strong>
+        <label for="aZip">郵便番号<input id="aZip" inputmode="numeric" maxlength="8" autocomplete="off"></label>
+        <label for="aChome">丁目（数字だけ。ゴミの日は丁目で変わります）<input id="aChome" inputmode="numeric" maxlength="2" autocomplete="off"></label>
+        <div class="log" id="aInfo"></div>
+        <div id="gList" style="display:grid;gap:8px"></div>
+        <div class="row"><button type="button" class="btn" id="gAdd">ゴミの種類をふやす</button></div>
+        <div class="log">ゴミの表を空のまま保存すると、分かっている地域は表を自動で入れます。区や市の「ゴミの出し方」の紙と見くらべて、ちがっていたら直してください。</div>
+        <label for="aPin">家族用の暗証番号<input id="aPin" type="password" inputmode="numeric" autocomplete="off"></label>
+        <div class="row"><button type="button" class="btn" id="aSave">地域とゴミの日を保存</button><span class="log" id="aMsg"></span></div>
+      </div>
       <div class="form" style="padding:0" id="contactSec">
         <strong style="font-size:.9rem;color:var(--mute)">よく使う連絡先（タクシー・病院など。電話は本人がボタンを押したときだけかかります）</strong>
         <div id="cList" style="display:grid;gap:8px"></div>
@@ -249,7 +295,7 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
   if(prefs.mode==='radio') prefs.mode='auto';
   if(!prefs.listen) prefs.listen='normal';
   var counts=null;
-  var SCREEN_VERSION='10/23-2', brainVersion=null;   // 画面の版。上げ直すたびに変える
+  var SCREEN_VERSION='10/23-3', brainVersion=null;   // 画面の版。上げ直すたびに変える
   function renderVer(){ $('verLine').textContent='テスト版　画面 '+SCREEN_VERSION+' ／ 頭脳 '+(brainVersion?('v'+brainVersion):'—'); }  // 覚えている件数（頭脳から。中身は持たない）
 
   /* ---------- 状態 ---------- */
@@ -370,7 +416,7 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
     if(opt.unprompted){ var c=$('cap'); c.classList.remove('flash'); void c.offsetWidth; c.classList.add('flash'); try{navigator.vibrate&&navigator.vibrate([150,80,150]);}catch(e){} }
     var done=false;
     function finish(){ if(done||gen!==speakGen) return; done=true;
-      setTimeout(function(){ if(gen!==speakGen) return; listen(); startSilence(opt.wait, opt.keepStep); medsTick(); }, 350); }
+      setTimeout(function(){ if(gen!==speakGen) return; listen(); startSilence(opt.wait, opt.keepStep); if(!medsTick()) dayTick(); }, 350); }
     if(!('speechSynthesis' in window)){ setTimeout(finish, 600+140*text.length); return; }
     try{
       speechSynthesis.cancel();
@@ -441,6 +487,9 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
     if(due && TAKEN_RE.test(text) && !NOT_RE.test(text) && !DIDI_RE.test(text)){ markTaken(due); return; }
     if(/薬|くすり/.test(text) && MEDQ_RE.test(text)){ say('お薬の 飲み方は、お医者さんか 薬局の人に きこうね。','きいてみよう'); return; }
     if(DIDI_RE.test(text) && meds){ say(takenReport(),'おくすり'); return; }
+    if(GOMI_OUT_RE.test(text) && !$('gomi').hidden && !$('gomi').classList.contains('eve')){ gomiOut(); logLocal(text,'（ゴミを出した）'); return; }
+    if(EVQ_RE.test(text) && !EVSET_RE.test(text) && prefs.url){ var et=eventsText(text); say(et,'よてい'); logLocal(text,et); return; }
+    if(GOMIQ_RE.test(text) && area && area.garbage.length){ var gt=gomiText(text); say(gt,'ゴミ'); logLocal(text,gt); return; }
     var cr=contactAsk(text); if(cr){ answerContact(cr,text); return; }
     if(isAizuchi(text)){ var a=AIZUCHI[Math.floor(Math.random()*AIZUCHI.length)]; say(a); logLocal(text,a); return; }
     // テレビかもしれない：相手のいない長い話し声が続いたら、一度だけ確かめる
@@ -489,6 +538,7 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
     // 会話は頭脳の側で全部残し、今日と昨日の分・要点・関係する思い出を頭脳が選んで渡す
     call('talk',{mode:mode,listen:prefs.listen,text:userText||'',medsNote:medsNote(),soul:prefs.soul,name:prefs.name}).then(function(r){
       last={say:r.say,keyword:r.keyword,followup:r.followup};
+      if(Array.isArray(r.events)){ events=r.events; renderEventForm(); renderDay(); }
       refreshCounts();
       speak(r.say,{keyword:r.keyword});
     }).catch(function(e){
@@ -514,25 +564,27 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
       if(!e.taken && now>=d && now<d+s.graceMinutes+90) return sl; }
     return null;
   }
-  function medsNote(){ var d=dueSlot(); return d?('いまは「'+d.label+'」のお薬の時間で、まだ飲んでいない。話の切れ目でやさしく思い出させてよい。飲むかどうか・量は本人とお医者さんが決めること。'):''; }
+  function medsNote(){ var d=dueSlot(); return d?('いまは「'+d.label+'」のお薬の時間で、まだ飲んでいない。念押しは画面がするので、自分からお薬の話を出さない。相手がお薬の話をしたときだけ使う。飲むかどうか・量は本人とお医者さんが決めること。'):''; }
   function refreshMeds(){
-    if(!prefs.url) return;
-    call('state').then(function(st){ meds=st; counts=st.counts||counts; talkInfo=st.talk||talkInfo; takeContacts(st); renderMemory(); medsTick(); }).catch(function(){});
+    if(!prefs.url) return Promise.resolve();
+    return call('state').then(function(st){ keepTaken(st); meds=st; counts=st.counts||counts; talkInfo=st.talk||talkInfo; takeContacts(st); takeDay(st); renderMemory(); medsTick(); }).catch(function(){});
   }
   function medsTick(){
-    var d=dueSlot(); $('takeBtn').hidden=!d; if(!d) return;
+    var d=dueSlot(); $('takeBtn').hidden=!d; if(!d) return false;
     $('takeBtn').dataset.slot=d.id;
     var now=jstMin();
     if(phase==='listening' && (remindAt[d.id]===undefined || now-remindAt[d.id]>=10) && (remindCount[d.id]||0)<4){
       remindAt[d.id]=now;
       var n=(remindCount[d.id]=(remindCount[d.id]||0)+1); // 4回まで。2回目からは短く
       speak(n===1?(prefs.name+'、'+d.label+'の お薬の 時間だよ。のんだら「のんだよ」って おしえてね。'):(prefs.name+'、お薬 わすれて ないかな？'),{keyword:'おくすり',unprompted:true});
+      return true;
     }
+    return false;
   }
   function markTaken(slot){
     if(meds){ meds.log[slot.id]=meds.log[slot.id]||{}; meds.log[slot.id].taken='済'; }
     $('takeBtn').hidden=true;
-    speak('えらいね！ちゃんと のめたね。おぼえておくよ。',{keyword:'のめたね'});
+    speak('のめたね。おぼえておくよ。',{keyword:'のめたね'});
     call('taken',{slot:slot.id}).then(function(log){ if(meds) meds.log=log; }).catch(function(){
       if(meds) delete meds.log[slot.id].taken; $('takeBtn').hidden=false;
       speak('ごめんね、記録できなかったよ。ボタンを 押してね。');
@@ -543,8 +595,9 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
   $('startBtn').addEventListener('click',function(){
     $('start').hidden=true;
     try{ if(navigator.wakeLock) navigator.wakeLock.request('screen').then(function(w){wakeLock=w;}).catch(function(){}); }catch(e){}
-    setupEar(); startMeter(); renderLog(); refreshMeds();
-    ask(null);
+    setupEar(); startMeter(); renderLog();
+    if(morningDue()){ setPhase('thinking'); refreshMeds().then(sayMorning); }
+    else { refreshMeds(); ask(null); }
   });
   $('ring').addEventListener('click',function(){ // さえぎって聞く
     if(phase==='idle') return;
@@ -575,7 +628,7 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
     prefs.mode=$('fMode').value; prefs.listen=$('fListen').value; prefs.rate=$('fRate').value; prefs.pitch=$('fPitch').value; prefs.typeIn=$('fType').checked; prefs.se=$('fSe').checked; prefs.barge=$('fBarge').checked;
     save('prefs',prefs); renderLog(); $('typeBox').hidden=!prefs.typeIn;
     $('saveMsg').textContent='保存しました。';
-    if(prefs.url){ call('state').then(function(st){meds=st; counts=st.counts||null; talkInfo=st.talk||null; takeContacts(st); renderMemory(); $('saveMsg').textContent='保存しました。頭脳につながりました。'; medsTick();})
+    if(prefs.url){ call('state').then(function(st){meds=st; counts=st.counts||null; talkInfo=st.talk||null; takeContacts(st); takeDay(st); renderMemory(); $('saveMsg').textContent='保存しました。頭脳につながりました。'; medsTick();})
       .catch(function(err){ $('saveMsg').textContent='保存しました。ただし頭脳につながりません：'+err.message; }); }
   });
   function renderMemory(){
@@ -584,7 +637,12 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
     if(!counts){ $('memList').textContent=prefs.url?'（頭脳につながると出ます）':'頭脳につながっていません'; return; }
     $('memList').textContent='思い出 '+counts.memory+' こ ／ 物の置き場所 '+counts.place+' こ';
   }
-  function refreshCounts(){ if(prefs.url) call('state').then(function(st){ meds=st; counts=st.counts||counts; talkInfo=st.talk||talkInfo; renderMemory(); }).catch(function(){}); }
+  function refreshCounts(){ if(prefs.url) call('state').then(function(st){ keepTaken(st); meds=st; counts=st.counts||counts; talkInfo=st.talk||talkInfo; takeDay(st); renderMemory(); }).catch(function(){}); }
+  // 調書12：「のんだよ」の直後に、記録を送る前の古い様子が返ってきても「飲んだ」を消さない
+  function keepTaken(st){
+    if(!meds||!meds.log||!st||meds.today!==st.today) return; st.log=st.log||{};
+    Object.keys(meds.log).forEach(function(id){ var e=meds.log[id]; if(e&&e.taken){ st.log[id]=st.log[id]||{}; if(!st.log[id].taken) st.log[id].taken=e.taken; } });
+  }
   var talkInfo=null;
   function renderTalk(){
     if(!talkInfo){ $('talkCount').textContent=''; return; }
@@ -683,6 +741,148 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
       contacts=c; renderContactForm(); $('cPin').value=''; $('cMsg').textContent=c.length+' 件 保存しました。';
     }).catch(function(e){ $('cMsg').textContent='保存できませんでした：'+e.message; });
   });
+  /* ---------- 予定・ゴミの日・天気・朝のまとめ（調書13〜15） ---------- */
+  var events=[], area=null, areaLoaded=false, WD='日月火水木金土';
+  var GOMI_OUT_RE=/(ゴミ|ごみ)[^。？?]*(出した|だした|捨てた|すてた|出してきた|だしてきた)|^(出した|だした|出してきた|だしてきた)よ?[。！!]*$/;
+  var EVQ_RE=/(予定|よてい)[^。]*(ある|何|なに|なん|教えて|おしえて|だっけ|は[？?]?$)/, EVSET_RE=/(入れ|いれ|登録|覚え|おぼえ|消し|けし|やめ)/;
+  var GOMIQ_RE=/(ゴミ|ごみ)[^。]*(何|なに|なん|いつ|日|出せる|だせる|出す日|だすひ)/;
+  // 自分で作った簡単な絵（自治体の表の絵は使わない）
+  var GOMI_ICON={
+    burn:'<path d="M12 2.5c.8 3.2 4.6 5.3 4.6 10a4.6 4.6 0 0 1-9.2 0c0-2.2 1.1-3.6 2.3-4.6-.1 2.1.9 3.4 2.1 3.6-.4-3.3-.9-5.6.2-9z" fill="currentColor"/>',
+    noburn:'<path d="M6.5 4h11l-1.6 15.2A2 2 0 0 1 13.9 21h-3.8a2 2 0 0 1-2-1.8z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M10 8l2 3-1.5 2.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
+    recycle:'<path d="M10 2.5h4v3l2.2 3.3V19a2.5 2.5 0 0 1-2.5 2.5h-3.4A2.5 2.5 0 0 1 7.8 19V8.8L10 5.5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M8 12.5h8" stroke="currentColor" stroke-width="2"/>',
+    big:'<rect x="3" y="7.5" width="18" height="12.5" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3 11.5h18M9.5 7.5V4.5h5v3" fill="none" stroke="currentColor" stroke-width="2"/>',
+    other:'<path d="M5.5 8.5h13l-1.2 12h-10.6z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M9 8.5c0-3.6 6-3.6 6 0" fill="none" stroke="currentColor" stroke-width="2"/>'
+  };
+  function todayKey(){ return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()); }
+  function addDays(ymd,n){ var p=ymd.split('-').map(Number); return new Date(Date.UTC(p[0],p[1]-1,p[2]+n)).toISOString().slice(0,10); }
+  function dayWords(ymd){ var p=ymd.split('-').map(Number); return p[1]+'月'+p[2]+'日 '+WD.charAt(new Date(Date.UTC(p[0],p[1]-1,p[2])).getUTCDay())+'曜日'; }
+  function hmWords(hm){ var h=+hm.slice(0,2), m=+hm.slice(3); return h+'時'+(m?m+'分':''); }
+  // その日に一度だけのこと（朝のまとめ・ゴミを出した・予定の声かけ）の印。日が変わると消える
+  function dayFlag(k){ var f=load('day',{}); return f.date===todayKey()&&!!f[k]; }
+  function setFlag(k){ var f=load('day',{}), t=todayKey(); if(f.date!==t) f={date:t}; f[k]=1; save('day',f); }
+  function takeDay(st){
+    if(!st) return;
+    if(Array.isArray(st.events)){ events=st.events; renderEventForm(); }
+    if('area' in st){ area=st.area||null; if(!areaLoaded){ areaLoaded=true; renderAreaForm(); } }
+    renderDay();
+  }
+  function renderDay(){
+    var w=area&&area.weather, wl=$('wxLine'); wl.textContent='';
+    if(w&&w.days.length&&w.days[0].date===todayKey()){
+      var d=w.days[0], b=document.createElement('b'); b.textContent='きょう '+d.weather; wl.appendChild(b);
+      if(d.pop!=='') wl.appendChild(document.createTextNode(' ／ 雨 '+d.pop+'%'));
+      var sm=document.createElement('small'); sm.textContent=w.src; wl.appendChild(sm);
+    }
+    var g=$('gomi'), h=Math.floor(jstMin()/60), list=null, eve=false;
+    if(area&&area.today.length&&h<12&&!dayFlag('gomiOut')) list=area.today;
+    else if(area&&area.tomorrow.length&&h>=17){ list=area.tomorrow; eve=true; }
+    g.hidden=!list; g.className='gomi'+(eve?' eve':''); g.textContent='';
+    if(!list) return;
+    list.forEach(function(x){
+      var type=GOMI_ICON[x.type]?x.type:'other';
+      var band=document.createElement('div'); band.className='band g-'+type;
+      band.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true">'+GOMI_ICON[type]+'</svg>';
+      var t=document.createElement('div');
+      var wn=document.createElement('div'); wn.className='when'; wn.textContent=eve?'あしたは':'きょうは'; t.appendChild(wn);
+      var k=document.createElement('div'); k.className='kind'; k.textContent=x.kind+' の日'; t.appendChild(k);
+      if(x.how){ var hw=document.createElement('div'); hw.className='how'; hw.textContent=x.how; t.appendChild(hw); }
+      band.appendChild(t); g.appendChild(band);
+    });
+    if(!eve){ var btn=document.createElement('button'); btn.type='button'; btn.className='take'; btn.textContent='出したよ'; btn.addEventListener('click',gomiOut); g.appendChild(btn); }
+  }
+  function gomiOut(){ setFlag('gomiOut'); renderDay(); say('出せたね。おつかれさま。','ゴミ'); }
+  function kinds(list){ return list.map(function(x){return x.kind;}).join('と'); }
+  function morningDue(){ var h=Math.floor(jstMin()/60); return !!prefs.url&&h>=5&&h<11&&!dayFlag('morning'); }
+  function morningText(){
+    var t=todayKey(), out=['おはよう、'+prefs.name+'。きょうは '+dayWords(t)+'。'];
+    var w=area&&area.weather&&area.weather.days[0];
+    if(w&&w.date===t) out.push('気象庁の予報では、きょうは「'+w.weather+'」'+(w.pop!==''?'、雨の確率は いちばん高くて '+w.pop+'パーセント':'')+'。');
+    if(area&&area.today.length&&!dayFlag('gomiOut')) out.push('きょうは '+kinds(area.today)+' の日だよ。');
+    var ev=events.filter(function(e){return e.date===t;});
+    if(ev.length) out.push('予定は、'+ev.map(function(e){return (e.time?hmWords(e.time)+'に ':'')+e.what;}).join('、')+'。');
+    if(meds&&meds.settings&&meds.settings.slots.length) out.push('お薬は '+meds.settings.slots.map(function(sl){return sl.label+'（'+hmWords(sl.time)+'）';}).join('、')+'。');
+    return out.join(' ');
+  }
+  function sayMorning(){ setFlag('morning'); var t=morningText(); last={say:t,keyword:'きょう',followup:''}; logLocal('',t); speak(t,{keyword:'きょう',unprompted:true}); }
+  function speakNote(t,k){ last={say:t,keyword:k,followup:''}; logLocal('',t); speak(t,{keyword:k,unprompted:true}); }
+  // 聞いているあいだだけ、予定の声かけ・前の晩のゴミ・開いたままの朝のまとめ（7時）を一つずつ
+  function dayTick(){
+    renderDay();
+    if(phase!=='listening'||heardBuf||lastInterim) return false;
+    var now=jstMin(), t=todayKey(), h=Math.floor(now/60);
+    if(morningDue()&&h>=7){ sayMorning(); return true; }
+    for(var i=0;i<events.length;i++){
+      var e=events[i]; if(e.date!==t||!e.time) continue;
+      var rem=toMin(e.time)-now;
+      if(rem>0&&rem<=30&&!dayFlag(e.id+'pre')){ setFlag(e.id+'pre'); speakNote(prefs.name+'、あと '+rem+'分で 「'+e.what+'」の 時間だよ。','よてい'); return true; }
+      if(rem<=0&&rem>-30&&!dayFlag(e.id+'at')){ setFlag(e.id+'pre'); setFlag(e.id+'at'); speakNote(prefs.name+'、「'+e.what+'」の 時間だよ。','よてい'); return true; }
+    }
+    if(h>=19&&h<22&&area&&area.tomorrow.length&&!dayFlag('gomiEve')){ setFlag('gomiEve'); speakNote('あしたは '+kinds(area.tomorrow)+' の日だよ。','あしたゴミ'); return true; }
+    return false;
+  }
+  function eventsText(text){
+    var t=todayKey(), day=/あさって|明後日/.test(text)?addDays(t,2):/あした|明日/.test(text)?addDays(t,1):/これから|今週|来週|今度|こんど/.test(text)?'':t;
+    var name=!day?'これからの':day===t?'きょうの':day===addDays(t,1)?'あしたの':'あさっての';
+    var list=events.filter(function(e){return !day||e.date===day;});
+    if(!list.length) return name+' 予定は、入ってないよ。入れるときは「あしたの2時に歯医者」みたいに 言ってね。';
+    return name+' 予定は、'+list.slice(0,4).map(function(e){return (day?'':dayWords(e.date).split(' ')[0]+' ')+(e.time?hmWords(e.time)+'に ':'')+e.what;}).join('、')+'。';
+  }
+  function gomiText(text){
+    var tm=/あした|明日/.test(text), list=tm?area.tomorrow:area.today;
+    var out=(tm?'あしたは ':'きょうは ')+(list.length?kinds(list)+' の日だよ。':'ゴミの 収集は ないよ。');
+    if(/いつ|何曜|なんよう|なん曜/.test(text)) out+=' ゴミの日は、'+area.garbage.map(function(g){return g.kind+'が '+(g.weeks?g.weeks+'の ':'')+g.days.split('・').map(function(d){return d+'曜';}).join('と');}).join('、')+'。';
+    return out;
+  }
+  // 家族の設定：予定
+  function renderEventForm(){
+    var l=$('evList'); l.textContent='';
+    if(!events.length){ l.textContent=prefs.url?'入っている予定はありません（7日先まで出ます）':'頭脳につながっていません'; return; }
+    events.forEach(function(e){
+      var r=document.createElement('div'); r.className='evrow';
+      var sp=document.createElement('span'); sp.textContent=dayWords(e.date)+' '+(e.time?hmWords(e.time)+' ':'')+e.what;
+      var b=document.createElement('button'); b.type='button'; b.className='btn'; b.textContent='消す';
+      b.addEventListener('click',function(){ call('delEvent',{id:e.id}).then(function(list){ events=list; renderEventForm(); renderDay(); $('evMsg').textContent='消しました。'; }).catch(function(err){ $('evMsg').textContent='消せませんでした：'+err.message; }); });
+      r.appendChild(sp); r.appendChild(b); l.appendChild(r);
+    });
+  }
+  $('evAdd').addEventListener('click',function(){
+    if(!prefs.url){ $('evMsg').textContent='頭脳につながっていません'; return; }
+    var ev={date:$('evDate').value,time:$('evTime').value,what:$('evWhat').value.trim()}, before=events.length;
+    if(!ev.date||!ev.what){ $('evMsg').textContent='日にちと中身を入れてください'; return; }
+    call('addEvent',{event:ev}).then(function(list){
+      events=list; renderEventForm(); renderDay();
+      if(list.length>before){ $('evWhat').value=''; $('evMsg').textContent='入れました。'; }
+      else $('evMsg').textContent='入りませんでした（きょうより前の日か、同じ予定がもうあります。7日より先の予定は、近づくとここに出ます）';
+    }).catch(function(err){ $('evMsg').textContent='入れられませんでした：'+err.message; });
+  });
+  // 家族の設定：地域とゴミの日
+  function gomiRow(g){
+    g=g||{kind:'',days:'',weeks:'',how:''};
+    var d=document.createElement('div'); d.className='grow';
+    function mk(cls,ph,val,max,full){ var i=document.createElement('input'); i.className=cls+(full?' full':''); i.placeholder=ph; i.setAttribute('aria-label',ph); i.maxLength=max; i.value=val||''; d.appendChild(i); }
+    mk('gk','種類（例：可燃ごみ）',g.kind,12,true); mk('gd','曜日（例：月・木）',g.days,20,false); mk('gw','週（毎週なら空。例：第2）',g.weeks,12,false); mk('gh','出し方（例：朝8時までに）',g.how,40,true);
+    var del=document.createElement('button'); del.type='button'; del.className='btn full'; del.textContent='この種類を消す';
+    del.addEventListener('click',function(){ d.remove(); }); d.appendChild(del);
+    return d;
+  }
+  function renderAreaForm(){
+    $('aZip').value=area?area.zip:''; $('aChome').value=area?area.chome:'';
+    $('aInfo').textContent=area?('地域：'+area.label+'（天気は気象庁の「'+(area.jmaName||'見つからない')+'」の予報）'+(area.src?'　ゴミの表：'+area.src:'')):'まだ入っていません';
+    var l=$('gList'); l.textContent=''; (area?area.garbage:[]).forEach(function(g){ l.appendChild(gomiRow(g)); });
+  }
+  $('gAdd').addEventListener('click',function(){ $('gList').appendChild(gomiRow()); });
+  $('aSave').addEventListener('click',function(){
+    if(!prefs.url){ $('aMsg').textContent='頭脳につながっていません'; return; }
+    var list=[].map.call($('gList').querySelectorAll('.grow'),function(d){
+      return {kind:d.querySelector('.gk').value.trim(),days:d.querySelector('.gd').value.trim(),weeks:d.querySelector('.gw').value.trim(),how:d.querySelector('.gh').value.trim()};
+    }).filter(function(g){ return g.kind||g.days; });
+    $('aMsg').textContent='調べています…';
+    call('saveArea',{zip:$('aZip').value,chome:$('aChome').value,garbage:list,pin:$('aPin').value}).then(function(a){
+      area=a; renderAreaForm(); renderDay(); $('aPin').value=''; $('aMsg').textContent='保存しました。';
+    }).catch(function(e){ $('aMsg').textContent='保存できませんでした：'+e.message; });
+  });
+
   var forgetArmed=false;
   $('forgetBtn').addEventListener('click',function(){
     if(!forgetArmed){ forgetArmed=true; this.textContent='もう一度押すと全部消えます'; var b=this; setTimeout(function(){forgetArmed=false;b.textContent='覚えていることを全部消す';},5000); return; }
@@ -693,7 +893,7 @@ summary{font-weight:700;padding:10px 0;cursor:pointer;color:var(--mute)}
 
   applyPrefs(); renderMemory(); renderLog(); renderVer();
   if('speechSynthesis' in window){ try{speechSynthesis.getVoices();}catch(e){} }
-  setInterval(medsTick,30000);
+  setInterval(function(){ if(!medsTick()) dayTick(); },30000);
   setInterval(refreshMeds,5*60000);
 })();
 </script>
